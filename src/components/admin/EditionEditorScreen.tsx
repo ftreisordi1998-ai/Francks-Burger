@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useDialog } from "@/lib/dialog-context";
@@ -68,6 +68,10 @@ export function EditionEditorScreen({
 }) {
   const [edition, setEdition] = useState(initialEdition);
   const [savedEdition, setSavedEdition] = useState(initialEdition);
+  const savedEditionRef = useRef(initialEdition);
+  useEffect(() => {
+    savedEditionRef.current = savedEdition;
+  }, [savedEdition]);
   const [products, setProducts] = useState(initialProducts);
   const [windows, setWindows] = useState(initialWindows);
   const [neighborhoods, setNeighborhoods] = useState(initialNeighborhoods);
@@ -90,6 +94,50 @@ export function EditionEditorScreen({
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    async function start() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) supabase.realtime.setAuth(session.access_token);
+
+      channel = supabase
+        .channel(`admin-edition-${initialEdition.id}`)
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "editions", filter: `id=eq.${initialEdition.id}` },
+          (payload) => {
+            const nextStatus = (payload.new as Edition).status;
+            // Só sincroniza a Situação se ninguém estiver com uma troca de status
+            // ainda não salva nesta aba — outros campos ficam de fora de propósito,
+            // pra um toggle feito em outro lugar nunca sobrescrever uma edição em
+            // andamento aqui.
+            const wasInSyncWithSaved = savedEditionRef.current.status;
+            setSavedEdition((prev) => ({ ...prev, status: nextStatus }));
+            setEdition((prev) => (prev.status === wasInSyncWithSaved ? { ...prev, status: nextStatus } : prev));
+          }
+        )
+        .subscribe();
+    }
+
+    start();
+
+    const {
+      data: { subscription: authSubscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) supabase.realtime.setAuth(session.access_token);
+    });
+
+    return () => {
+      authSubscription.unsubscribe();
+      if (channel) supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialEdition.id]);
 
   async function saveAll() {
     setSaving(true);

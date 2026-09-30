@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/Badge";
 import { useDialog } from "@/lib/dialog-context";
@@ -29,6 +29,54 @@ export function EditionsListScreen({ initialEditions }: { initialEditions: Editi
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const { confirmDialog, alertDialog } = useDialog();
   const router = useRouter();
+
+  useEffect(() => {
+    const supabase = createClient();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    async function start() {
+      // O socket do Realtime não herda a sessão dos cookies automaticamente —
+      // sem isto, updates na tabela `editions` são bloqueados pela RLS.
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) supabase.realtime.setAuth(session.access_token);
+
+      channel = supabase
+        .channel("admin-editions-list")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "editions" },
+          (payload) => {
+            if (payload.eventType === "DELETE") {
+              setEditions((prev) => prev.filter((ed) => ed.id !== (payload.old as Edition).id));
+              return;
+            }
+            setEditions((prev) => {
+              const updated = payload.new as Edition;
+              if (prev.some((ed) => ed.id === updated.id)) {
+                return prev.map((ed) => (ed.id === updated.id ? { ...ed, ...updated } : ed));
+              }
+              return [updated, ...prev];
+            });
+          }
+        )
+        .subscribe();
+    }
+
+    start();
+
+    const {
+      data: { subscription: authSubscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) supabase.realtime.setAuth(session.access_token);
+    });
+
+    return () => {
+      authSubscription.unsubscribe();
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, []);
 
   async function handleToggleOpen(edition: Edition, nextOpen: boolean) {
     setTogglingId(edition.id);
