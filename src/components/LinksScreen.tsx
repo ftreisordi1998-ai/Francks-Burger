@@ -95,14 +95,25 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
         ))}
       </div>
 
-      <div className="mt-7 flex flex-col gap-3">
-        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(2)}>
+      <div
+        className={reducedMotion ? "mt-7 flex justify-center" : "links-reveal mt-7 flex justify-center"}
+        style={revealStyle(2)}
+        aria-hidden
+      >
+        <span className="h-px w-16 bg-gradient-to-r from-transparent via-orange/35 to-transparent" />
+      </div>
+
+      <div className="mt-5 flex flex-col gap-3">
+        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(3)}>
           <Link
             href={LINKS_PAGE_URLS.order}
             className={`group flex min-h-[76px] w-full flex-col items-start justify-center gap-0.5 rounded-[20px] bg-orange px-5 py-4 text-left shadow-[0_8px_20px_-6px_rgba(232,84,15,0.35)] transition duration-150 [transition-property:transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_14px_28px_-6px_rgba(232,84,15,0.45)] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-dark focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
               ctaPulse ? "links-cta-pulse" : ""
             }`}
           >
+            <span className="text-[11px] font-extrabold uppercase tracking-wide text-white/70">
+              Pedidos
+            </span>
             <span className="flex w-full items-center justify-between gap-3">
               <span className="text-[17px] font-extrabold text-white">Faça sua encomenda</span>
               <ArrowIcon className="shrink-0 text-white transition-transform duration-150 group-hover:translate-x-0.5" />
@@ -120,13 +131,16 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
           </Link>
         </div>
 
-        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(3)}>
+        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(4)}>
           <a
             href={LINKS_PAGE_URLS.whatsappGroup}
             target="_blank"
             rel="noreferrer"
-            className="flex min-h-[76px] w-full flex-col items-start justify-center gap-0.5 rounded-[20px] bg-white px-5 py-4 text-left shadow-[0_1px_2px_rgba(44,24,16,0.06),0_4px_14px_rgba(44,24,16,0.06)] transition duration-150 [transition-property:transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(44,24,16,0.1)] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange focus-visible:ring-offset-2 focus-visible:ring-offset-cream"
+            className="group flex min-h-[76px] w-full flex-col items-start justify-center gap-0.5 rounded-[20px] bg-white px-5 py-4 text-left shadow-[0_1px_2px_rgba(44,24,16,0.06),0_4px_14px_rgba(44,24,16,0.06)] transition duration-150 [transition-property:transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(44,24,16,0.1)] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange focus-visible:ring-offset-2 focus-visible:ring-offset-cream"
           >
+            <span className="text-[11px] font-extrabold uppercase tracking-wide text-success">
+              Comunidade
+            </span>
             <span className="flex w-full items-center gap-3">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-success-bg text-success">
                 <WhatsAppIcon />
@@ -140,6 +154,7 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
                   novidades.
                 </span>
               </span>
+              <ArrowIcon className="shrink-0 text-coffee-soft/50 transition-transform duration-150 group-hover:translate-x-0.5" />
             </span>
           </a>
           <p className="mt-1.5 px-1 text-[12px] leading-snug text-coffee-soft/80">
@@ -147,27 +162,31 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
           </p>
         </div>
 
-        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(4)}>
+        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(5)}>
           <a
             href={LINKS_PAGE_URLS.instagram}
             target="_blank"
             rel="noreferrer"
-            className="flex min-h-[64px] w-full items-center gap-3 rounded-[20px] px-5 py-3.5 text-left transition duration-150 [transition-property:transform,background-color] hover:bg-white active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange focus-visible:ring-offset-2 focus-visible:ring-offset-cream"
+            className="group flex min-h-[64px] w-full items-center gap-3 rounded-[20px] px-5 py-3.5 text-left transition duration-150 [transition-property:transform,background-color] hover:bg-white active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange focus-visible:ring-offset-2 focus-visible:ring-offset-cream"
           >
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-soft text-orange-dark">
               <InstagramIcon />
             </span>
             <span className="min-w-0 flex-1">
+              <span className="block text-[11px] font-extrabold uppercase tracking-wide text-coffee-soft/70">
+                Redes sociais
+              </span>
               <span className="block text-[15px] font-bold text-coffee">Siga e marque a Franck&rsquo;s</span>
               <span className="block text-[13px] leading-snug text-coffee-soft">
                 Postou seu burger? Marque @francksburger.
               </span>
             </span>
+            <ArrowIcon className="shrink-0 text-coffee-soft/40 transition-transform duration-150 group-hover:translate-x-0.5" />
           </a>
         </div>
       </div>
 
-      <section className={reducedMotion ? "mt-8" : "links-reveal mt-8"} style={revealStyle(5)}>
+      <section className={reducedMotion ? "mt-8" : "links-reveal mt-8"} style={revealStyle(6)}>
         <h2 className="text-[11px] font-extrabold uppercase tracking-wide text-coffee-soft">
           Como funciona
         </h2>
@@ -184,7 +203,7 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
         </ol>
       </section>
 
-      <footer className={reducedMotion ? "mt-10 flex flex-col items-center gap-2 text-center" : "links-reveal mt-10 flex flex-col items-center gap-2 text-center"} style={revealStyle(6)}>
+      <footer className={reducedMotion ? "mt-10 flex flex-col items-center gap-2 text-center" : "links-reveal mt-10 flex flex-col items-center gap-2 text-center"} style={revealStyle(7)}>
         <Logo size={28} />
         <p className="text-[12px] font-semibold text-coffee-soft">Franck&rsquo;s Burger · Uraí, PR</p>
       </footer>
