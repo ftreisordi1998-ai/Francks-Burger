@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/Badge";
-import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/status";
+import { createClient } from "@/lib/supabase/client";
+import { ORDER_STATUS_FLOW, ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/status";
 import type { EditionOption, FulfillmentType, OrderStatus, WindowType } from "@/lib/types";
 
 interface ProductionItem {
@@ -36,7 +37,7 @@ export function ProductionListScreen({
   editions,
   selectedEditionId,
   windows,
-  orders,
+  orders: initialOrders,
 }: {
   editions: EditionOption[];
   selectedEditionId: string;
@@ -44,6 +45,73 @@ export function ProductionListScreen({
   orders: ProductionOrder[];
 }) {
   const router = useRouter();
+  const [orders, setOrders] = useState(initialOrders);
+  const [view, setView] = useState<"janela" | "kanban">("janela");
+  const [movingId, setMovingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setOrders(initialOrders);
+  }, [initialOrders]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    async function start() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) supabase.realtime.setAuth(session.access_token);
+
+      channel = supabase
+        .channel("admin-production")
+        .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload) => {
+          if (payload.eventType === "DELETE") {
+            setOrders((prev) => prev.filter((o) => o.id !== (payload.old as { id: string }).id));
+            return;
+          }
+          const updated = payload.new as ProductionOrder;
+          setOrders((prev) => {
+            if (!prev.some((o) => o.id === updated.id)) return prev;
+            return prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o));
+          });
+        })
+        .subscribe();
+    }
+
+    start();
+
+    const {
+      data: { subscription: authSubscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) supabase.realtime.setAuth(session.access_token);
+    });
+
+    return () => {
+      authSubscription.unsubscribe();
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, []);
+
+  async function advanceOrder(order: ProductionOrder) {
+    const idx = ORDER_STATUS_FLOW.indexOf(order.order_status);
+    const next = ORDER_STATUS_FLOW[idx + 1];
+    if (!next) return;
+    setMovingId(order.id);
+    const supabase = createClient();
+    const { error } = await supabase.from("orders").update({ order_status: next }).eq("id", order.id);
+    setMovingId(null);
+    if (!error) {
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, order_status: next } : o)));
+      if (next === "confirmed") {
+        fetch("/api/push/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: order.id }),
+        }).catch(() => {});
+      }
+    }
+  }
 
   const groups = useMemo(() => {
     const byKey = new Map<
@@ -101,6 +169,15 @@ export function ProductionListScreen({
       });
   }, [windows, orders]);
 
+  const kanbanColumns = useMemo(() => {
+    return ORDER_STATUS_FLOW.map((status) => ({
+      status,
+      orders: orders
+        .filter((o) => o.order_status === status)
+        .sort((a, b) => a.created_at.localeCompare(b.created_at)),
+    }));
+  }, [orders]);
+
   const grandTotal = groups.reduce((sum, g) => sum + g.totalQty, 0);
 
   return (
@@ -110,24 +187,106 @@ export function ProductionListScreen({
           <h1 className="text-xl font-extrabold text-coffee">Lista de produção</h1>
           <p className="text-sm text-coffee-soft">
             {grandTotal > 0
-              ? `${grandTotal} hambúrguer${grandTotal === 1 ? "" : "es"} · agrupados por janela de horário`
+              ? `${grandTotal} hambúrguer${grandTotal === 1 ? "" : "es"} · ${orders.length} pedido${orders.length === 1 ? "" : "s"}`
               : "Nenhum pedido nesta edição ainda."}
           </p>
         </div>
-        <select
-          value={selectedEditionId}
-          onChange={(e) => router.push(`/admin/producao?edition=${e.target.value}`)}
-          className="input w-auto"
-        >
-          {editions.map((ed) => (
-            <option key={ed.id} value={ed.id}>
-              {ed.title}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-full bg-cream-soft p-1">
+            <button
+              onClick={() => setView("janela")}
+              className={`min-h-9 rounded-full px-3.5 text-sm font-bold transition-colors ${
+                view === "janela" ? "bg-orange text-white" : "text-coffee-soft"
+              }`}
+            >
+              Por janela
+            </button>
+            <button
+              onClick={() => setView("kanban")}
+              className={`min-h-9 rounded-full px-3.5 text-sm font-bold transition-colors ${
+                view === "kanban" ? "bg-orange text-white" : "text-coffee-soft"
+              }`}
+            >
+              Kanban
+            </button>
+          </div>
+          <select
+            value={selectedEditionId}
+            onChange={(e) => router.push(`/admin/producao?edition=${e.target.value}`)}
+            className="input w-auto"
+          >
+            {editions.map((ed) => (
+              <option key={ed.id} value={ed.id}>
+                {ed.title}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {groups.length === 0 ? (
+      {view === "kanban" ? (
+        orders.length === 0 ? (
+          <div className="rounded-2xl bg-white p-6 text-center text-sm text-coffee-soft">
+            Nenhum pedido para listar nesta edição.
+          </div>
+        ) : (
+          <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+            {kanbanColumns.map((col) => (
+              <div
+                key={col.status}
+                className="flex w-[260px] shrink-0 flex-col gap-2.5 rounded-2xl bg-cream-soft/60 p-3"
+              >
+                <div className="flex items-center justify-between gap-2 px-0.5">
+                  <h2 className="text-sm font-extrabold text-coffee">
+                    {ORDER_STATUS_LABEL[col.status]}
+                  </h2>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-coffee-soft">
+                    {col.orders.length}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {col.orders.map((order) => {
+                    const nextStatus = ORDER_STATUS_FLOW[ORDER_STATUS_FLOW.indexOf(order.order_status) + 1];
+                    return (
+                      <div key={order.id} className="flex flex-col gap-2 rounded-xl bg-white p-3 shadow-sm">
+                        <div>
+                          <p className="text-sm font-bold text-coffee">{order.customer_name}</p>
+                          <p className="text-xs text-coffee-soft">{order.window_label_snapshot}</p>
+                        </div>
+                        <ul className="flex flex-col gap-0.5">
+                          {order.order_items.map((item, i) => (
+                            <li key={i} className="text-xs text-coffee-soft">
+                              <span className="font-bold text-coffee">{item.qty}×</span>{" "}
+                              {item.product_name_snapshot}
+                              {item.customer_note && (
+                                <span className="italic"> · &ldquo;{item.customer_note}&rdquo;</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                        {nextStatus && (
+                          <button
+                            onClick={() => advanceOrder(order)}
+                            disabled={movingId === order.id}
+                            className="min-h-9 rounded-lg bg-orange-soft px-2.5 py-1.5 text-xs font-bold text-orange-dark disabled:opacity-50"
+                          >
+                            {movingId === order.id
+                              ? "Movendo…"
+                              : `Mover para "${ORDER_STATUS_LABEL[nextStatus]}" →`}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {col.orders.length === 0 && (
+                    <p className="px-1 text-xs text-coffee-soft/70">Vazio</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : groups.length === 0 ? (
         <div className="rounded-2xl bg-white p-6 text-center text-sm text-coffee-soft">
           Nenhum pedido para listar nesta edição.
         </div>
