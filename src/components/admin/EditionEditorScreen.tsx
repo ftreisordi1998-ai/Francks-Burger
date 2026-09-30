@@ -16,6 +16,7 @@ const EDITABLE_FIELDS = [
   "status",
   "prep_date",
   "order_deadline",
+  "opens_at",
   "reservation_expiry_minutes",
   "payment_deadline_hours",
   "pix_key",
@@ -317,6 +318,24 @@ export function EditionEditorScreen({
               }
               className="input"
             />
+          </Field>
+          <Field label="Abre automaticamente em (opcional)">
+            <input
+              type="datetime-local"
+              value={edition.opens_at ? toLocalInput(edition.opens_at) : ""}
+              onChange={(e) =>
+                setEdition({
+                  ...edition,
+                  opens_at: e.target.value ? new Date(e.target.value).toISOString() : null,
+                })
+              }
+              className="input"
+            />
+            <p className="mt-1 text-xs text-coffee-soft">
+              Deixe em branco para abrir assim que a situação estiver &ldquo;Aberta&rdquo;. Com
+              data marcada, as encomendas ficam bloqueadas até essa hora — sem precisar mexer em
+              nada na hora certa.
+            </p>
           </Field>
           <Field label="Minutos para expirar reserva não paga">
             <input

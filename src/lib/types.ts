@@ -17,6 +17,7 @@ export interface Edition {
   title: string;
   prep_date: string;
   order_deadline: string;
+  opens_at: string | null;
   status: EditionStatus;
   reservation_expiry_minutes: number;
   payment_deadline_hours: number | null;

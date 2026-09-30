@@ -107,19 +107,23 @@ export function EditionScreen({
   const deliveryWindows = windows.filter((w) => w.type === "delivery");
   const pickupWindows = edition.pickup_enabled ? windows.filter((w) => w.type === "pickup") : [];
 
+  const situationMessages: Record<string, string> = {
+    sold_out: "Esta edição esgotou. Fique de olho para a próxima.",
+    scheduled: edition.opens_at
+      ? `As encomendas abrem em ${formatDateTime(edition.opens_at)}.`
+      : "As encomendas ainda não abriram.",
+    deadline_passed: "O prazo para encomendar nesta edição já passou.",
+    closed_by_admin: "As encomendas desta edição não estão mais abertas. Fique de olho para a próxima.",
+  };
+
   async function handleOpenProduct(product: Product) {
     if (orderingEnabled) {
       setActiveProduct(product);
       return;
     }
-    const messages: Record<string, string> = {
-      sold_out: "Esta edição esgotou. Fique de olho para a próxima.",
-      deadline_passed: "O prazo para encomendar nesta edição já passou.",
-      closed_by_admin: "As encomendas desta edição não estão mais abertas.",
-    };
     await alertDialog({
       title: "Loja fechada no momento",
-      message: messages[situation] ?? "Não é possível fazer pedidos agora.",
+      message: situationMessages[situation] ?? "Não é possível fazer pedidos agora.",
     });
   }
 
@@ -230,12 +234,21 @@ export function EditionScreen({
                 </strong>
               </span>
             </div>
-            <p className="text-sm text-coffee-soft">
-              Prazo para encomendar:{" "}
-              <strong className="font-semibold text-coffee">
-                {formatDateTime(edition.order_deadline)}
-              </strong>
-            </p>
+            {situation === "scheduled" && edition.opens_at ? (
+              <p className="text-sm text-coffee-soft">
+                Abre em:{" "}
+                <strong className="font-semibold text-coffee">
+                  {formatDateTime(edition.opens_at)}
+                </strong>
+              </p>
+            ) : (
+              <p className="text-sm text-coffee-soft">
+                Prazo para encomendar:{" "}
+                <strong className="font-semibold text-coffee">
+                  {formatDateTime(edition.order_deadline)}
+                </strong>
+              </p>
+            )}
           </div>
         </div>
 
@@ -275,7 +288,7 @@ export function EditionScreen({
 
       {!orderingEnabled && (
         <div className="mx-5 mt-5 rounded-2xl bg-white px-4 py-3.5 text-sm text-coffee-soft lg:mx-8">
-          As encomendas desta edição não estão mais abertas. Fique de olho para a próxima.
+          {situationMessages[situation] ?? "Não é possível fazer pedidos agora."}
         </div>
       )}
 

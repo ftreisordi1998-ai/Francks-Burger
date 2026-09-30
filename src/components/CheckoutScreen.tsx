@@ -21,6 +21,7 @@ import type {
 
 const ERROR_MESSAGES: Record<string, string> = {
   EDITION_CLOSED: "Esta edição não está mais aceitando encomendas.",
+  NOT_OPEN_YET: "As encomendas desta edição ainda não abriram.",
   DEADLINE_PASSED: "O prazo para encomendar nesta edição já passou.",
   WINDOW_INVALID: "A janela escolhida não está mais disponível. Escolha outra.",
   WINDOW_TYPE_MISMATCH: "Escolha uma janela compatível com entrega ou retirada.",
