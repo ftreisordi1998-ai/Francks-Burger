@@ -7,7 +7,12 @@ import { Badge } from "./Badge";
 import { createClient } from "@/lib/supabase/client";
 import { useSwipeBack } from "@/lib/useSwipeBack";
 import { PixPayment } from "./PixPayment";
-import { getExistingPushSubscription, isPushSupported, subscribeToOrderPush } from "@/lib/push";
+import {
+  getExistingPushSubscription,
+  isAndroid,
+  isPushSupported,
+  subscribeToOrderPush,
+} from "@/lib/push";
 import { formatCents, formatDateShort, formatDateTime } from "@/lib/format";
 import {
   ORDER_STATUS_LABEL,
@@ -114,8 +119,9 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
         <section className="mt-4 flex flex-col gap-2 rounded-2xl bg-orange-soft px-4 py-3.5">
           <p className="text-sm font-bold text-orange-dark">Permitir notificações de pedidos</p>
           <p className="text-sm text-coffee">
-            Quando o seu pedido for confirmado, você recebe um aviso direto no celular — sem
-            precisar ficar checando esta página.
+            {isAndroid()
+              ? "Toque em ativar para saber, direto no seu Android, assim que seu pedido for confirmado — sem precisar ficar checando esta página."
+              : "Quando o seu pedido for confirmado, você recebe um aviso direto no celular — sem precisar ficar checando esta página."}
           </p>
           <button
             onClick={handleEnableNotifications}

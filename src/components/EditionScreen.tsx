@@ -10,7 +10,7 @@ import { SocialFooter } from "./SocialFooter";
 import { useCart } from "@/lib/cart-context";
 import { useDialog } from "@/lib/dialog-context";
 import { createClient } from "@/lib/supabase/client";
-import { ensurePushSubscription, isIOS, isPushSupported, isStandalone } from "@/lib/push";
+import { ensurePushSubscription, isAndroid, isIOS, isPushSupported, isStandalone } from "@/lib/push";
 import { formatDate, formatDateTime, formatWeekday } from "@/lib/format";
 import {
   canOrder,
@@ -149,7 +149,9 @@ export function EditionScreen({
                 Permitir notificações de pedidos
               </h2>
               <p className="text-[14px] leading-relaxed text-coffee-soft">
-                Quando o seu pedido for confirmado, você recebe um aviso direto no celular.
+                {isAndroid()
+                  ? "Toque em permitir para saber, direto no seu Android, assim que seu pedido for confirmado."
+                  : "Quando o seu pedido for confirmado, você recebe um aviso direto no celular."}
               </p>
               <button
                 onClick={handleAllowNotifications}

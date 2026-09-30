@@ -15,6 +15,12 @@ export function isIOS() {
   return /iphone|ipad|ipod/i.test(navigator.userAgent);
 }
 
+/** Android Chrome/Firefox support push in a regular browser tab — no install step needed. */
+export function isAndroid() {
+  if (typeof navigator === "undefined") return false;
+  return /android/i.test(navigator.userAgent);
+}
+
 export function isStandalone() {
   if (typeof window === "undefined") return false;
   return (
