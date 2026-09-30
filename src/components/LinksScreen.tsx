@@ -10,9 +10,7 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
   const [animEnabled, setAnimEnabled] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [tabVisible, setTabVisible] = useState(true);
-  const [steamInView, setSteamInView] = useState(true);
   const [ctaPulse, setCtaPulse] = useState(false);
-  const steamRef = useRef<HTMLDivElement>(null);
   const pulseFiredRef = useRef(false);
 
   useEffect(() => {
@@ -33,16 +31,6 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
   }, []);
 
   useEffect(() => {
-    const el = steamRef.current;
-    if (!el || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(([entry]) => setSteamInView(entry.isIntersecting), {
-      threshold: 0.2,
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
     if (reducedMotion || !animEnabled || pulseFiredRef.current) return;
     const timer = setTimeout(() => {
       if (pulseFiredRef.current) return;
@@ -53,11 +41,19 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
     return () => clearTimeout(timer);
   }, [reducedMotion, animEnabled]);
 
-  const steamPlaying = animEnabled && tabVisible && steamInView && !reducedMotion;
+  const cardsFloating = animEnabled && tabVisible && !reducedMotion;
 
   function revealStyle(index: number): React.CSSProperties {
     if (reducedMotion) return {};
     return { "--reveal-delay": `${index * 70}ms` } as React.CSSProperties;
+  }
+
+  function floatStyle(index: number): React.CSSProperties {
+    if (reducedMotion) return {};
+    return {
+      animationPlayState: cardsFloating ? "running" : "paused",
+      ["--float-delay" as string]: `${index * 0.4}s`,
+    } as React.CSSProperties;
   }
 
   return (
@@ -79,32 +75,9 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
         </span>
       </header>
 
-      <div
-        ref={steamRef}
-        className={reducedMotion ? "relative mt-6 rounded-[28px] bg-white/60 p-3.5" : "links-reveal relative mt-6 rounded-[28px] bg-white/60 p-3.5"}
-        style={revealStyle(1)}
-      >
-        <div className="flex items-end justify-center gap-2.5">
-          {LINKS_PAGE_PRODUCT_IMAGES.map((product, i) => (
-            <div key={product.name} className="relative">
-              <Steam active={steamPlaying} seed={i} />
-              <div className="relative z-10 h-[100px] w-[100px] overflow-hidden rounded-[20px] bg-cream-soft shadow-[0_10px_20px_-8px_rgba(44,24,16,0.28)] sm:h-[120px] sm:w-[120px]">
-                <Image
-                  src={product.url}
-                  alt={product.name}
-                  fill
-                  sizes="130px"
-                  className="object-cover"
-                  priority={i === 1}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-5 flex flex-col gap-4">
-        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(2)}>
+      <div className="mt-7 flex flex-col gap-4">
+        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(1)}>
+          <div className={reducedMotion ? "" : "links-float"} style={floatStyle(0)}>
           <Link
             href={LINKS_PAGE_URLS.order}
             className={`group relative flex w-full items-center gap-4 overflow-hidden rounded-[26px] bg-orange px-5 py-5 text-left shadow-[0_10px_24px_-8px_rgba(232,84,15,0.4)] transition duration-150 [transition-property:transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-8px_rgba(232,84,15,0.5)] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-dark focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
@@ -137,9 +110,11 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
               </span>
             </div>
           </Link>
+          </div>
         </div>
 
-        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(3)}>
+        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(2)}>
+          <div className={reducedMotion ? "" : "links-float"} style={floatStyle(1)}>
           <a
             href={LINKS_PAGE_URLS.whatsappGroup}
             target="_blank"
@@ -166,12 +141,14 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
               </span>
             </div>
           </a>
+          </div>
           <p className="mt-1.5 px-1 text-[12px] leading-snug text-coffee-soft/80">
             Os avisos chegam no grupo. Os pedidos são feitos pelo site.
           </p>
         </div>
 
-        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(4)}>
+        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(3)}>
+          <div className={reducedMotion ? "" : "links-float"} style={floatStyle(2)}>
           <a
             href={LINKS_PAGE_URLS.instagram}
             target="_blank"
@@ -194,10 +171,11 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
             </div>
             <ArrowIcon className="shrink-0 self-center text-coffee-soft/40 transition-transform duration-150 group-hover:translate-x-0.5" />
           </a>
+          </div>
         </div>
       </div>
 
-      <section className={reducedMotion ? "mt-8" : "links-reveal mt-8"} style={revealStyle(5)}>
+      <section className={reducedMotion ? "mt-8" : "links-reveal mt-8"} style={revealStyle(4)}>
         <h2 className="text-[11px] font-extrabold uppercase tracking-wide text-coffee-soft">
           Como funciona
         </h2>
@@ -214,7 +192,7 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
         </ol>
       </section>
 
-      <footer className={reducedMotion ? "mt-10 flex flex-col items-center gap-2 text-center" : "links-reveal mt-10 flex flex-col items-center gap-2 text-center"} style={revealStyle(6)}>
+      <footer className={reducedMotion ? "mt-10 flex flex-col items-center gap-2 text-center" : "links-reveal mt-10 flex flex-col items-center gap-2 text-center"} style={revealStyle(5)}>
         <Logo size={28} />
         <p className="text-[12px] font-semibold text-coffee-soft">Franck&rsquo;s Burger · Uraí, PR</p>
       </footer>
@@ -247,32 +225,6 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
         <span className="block text-[13px] leading-snug text-coffee-soft">{children}</span>
       </span>
     </li>
-  );
-}
-
-function Steam({ active, seed }: { active: boolean; seed: number }) {
-  const durations = [5.4, 6.2, 6.8];
-  const delays = [0, 1.6, 3.1];
-  return (
-    <div
-      className="pointer-events-none absolute inset-x-0 -top-2 z-0 flex justify-center"
-      aria-hidden
-    >
-      {[0, 1].map((wisp) => (
-        <div
-          key={wisp}
-          className="links-steam mx-0.5 h-11 w-2.5 rounded-full"
-          style={{
-            background:
-              "radial-gradient(ellipse at center, rgba(255,255,255,0.55), rgba(255,255,255,0) 72%)",
-            animationPlayState: active ? "running" : "paused",
-            opacity: active ? undefined : 0,
-            ["--steam-duration" as string]: `${durations[(seed + wisp) % durations.length]}s`,
-            ["--steam-delay" as string]: `${delays[(seed + wisp) % delays.length]}s`,
-          }}
-        />
-      ))}
-    </div>
   );
 }
 

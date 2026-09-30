@@ -134,26 +134,19 @@ select {
   animation-delay: var(--reveal-delay, 0ms);
 }
 
-@keyframes links-steam {
-  0% {
-    opacity: 0;
-    transform: translateY(0) scaleY(1);
-  }
-  15% {
-    opacity: 0.4;
-  }
-  70% {
-    opacity: 0.16;
-  }
+@keyframes links-float {
+  0%,
   100% {
-    opacity: 0;
-    transform: translateY(-28px) scaleY(1.15);
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
   }
 }
 
-.links-steam {
-  animation: links-steam var(--steam-duration, 6s) ease-in-out infinite;
-  animation-delay: var(--steam-delay, 0s);
+.links-float {
+  animation: links-float 4.2s ease-in-out infinite;
+  animation-delay: var(--float-delay, 0s);
 }
 
 @keyframes links-cta-pulse {
@@ -177,7 +170,7 @@ select {
   .animate-fade-in,
   .animate-dialog-pop,
   .links-reveal,
-  .links-steam,
+  .links-float,
   .links-cta-pulse {
     animation: none !important;
     opacity: 1 !important;
