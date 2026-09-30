@@ -13,8 +13,7 @@ import {
   PAYMENT_STATUS_LABEL,
   PAYMENT_STATUS_TONE,
 } from "@/lib/status";
-import type { AdminOrderRow, Edition, EditionOption, FulfillmentType, OrderStatus, PaymentStatus } from "@/lib/types";
-import { StoreStatusToggle } from "./StoreStatusToggle";
+import type { AdminOrderRow, EditionOption, FulfillmentType, OrderStatus, PaymentStatus } from "@/lib/types";
 
 const OPEN_ORDER_STATUSES: OrderStatus[] = [
   "awaiting_confirmation",
@@ -30,11 +29,9 @@ type ProgressFilter = "all" | "open" | "closed";
 export function AdminOrdersScreen({
   initialOrders,
   editions,
-  currentEdition,
 }: {
   initialOrders: AdminOrderRow[];
   editions: EditionOption[];
-  currentEdition: Edition | null;
 }) {
   const [orders, setOrders] = useState(initialOrders);
   const [editionFilter, setEditionFilter] = useState<string>("all");
@@ -132,10 +129,6 @@ export function AdminOrdersScreen({
   return (
     <div>
       <h1 className="text-xl font-extrabold text-coffee">Pedidos</h1>
-
-      <div className="mt-4">
-        <StoreStatusToggle edition={currentEdition} />
-      </div>
 
       <div className="mt-4 flex justify-center sm:justify-start">
         <div className="inline-flex rounded-full bg-cream-soft p-1">

@@ -8,6 +8,7 @@ import { useDialog } from "@/lib/dialog-context";
 import { createClient } from "@/lib/supabase/client";
 import { formatDateShort } from "@/lib/format";
 import { NewEditionButton } from "./NewEditionButton";
+import { ToggleSwitch } from "./ToggleSwitch";
 import type { Edition } from "@/lib/types";
 
 const STATUS_LABEL: Record<Edition["status"], string> = {
@@ -25,8 +26,24 @@ const STATUS_TONE: Record<Edition["status"], "info" | "success" | "warning"> = {
 export function EditionsListScreen({ initialEditions }: { initialEditions: Edition[] }) {
   const [editions, setEditions] = useState(initialEditions);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const { confirmDialog, alertDialog } = useDialog();
   const router = useRouter();
+
+  async function handleToggleOpen(edition: Edition, nextOpen: boolean) {
+    setTogglingId(edition.id);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("editions")
+      .update({ status: nextOpen ? "open" : "closed" })
+      .eq("id", edition.id)
+      .select("*")
+      .single();
+    setTogglingId(null);
+    if (!error && data) {
+      setEditions((prev) => prev.map((ed) => (ed.id === edition.id ? (data as Edition) : ed)));
+    }
+  }
 
   async function handleDelete(edition: Edition, e: React.MouseEvent) {
     e.preventDefault();
@@ -87,7 +104,21 @@ export function EditionsListScreen({ initialEditions }: { initialEditions: Editi
               </p>
               <p className="text-sm text-coffee-soft">Preparo em {formatDateShort(edition.prep_date)}</p>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-3">
+              <div
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                className="flex items-center gap-2"
+                title={edition.status === "open" ? "Loja aberta" : "Loja fechada"}
+              >
+                <ToggleSwitch
+                  checked={edition.status === "open"}
+                  disabled={togglingId === edition.id}
+                  onChange={(next) => handleToggleOpen(edition, next)}
+                />
+              </div>
               <Badge tone={STATUS_TONE[edition.status]}>{STATUS_LABEL[edition.status]}</Badge>
               <button
                 onClick={(e) => handleDelete(edition, e)}
