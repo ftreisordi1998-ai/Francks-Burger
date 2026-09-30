@@ -1,18 +1,17 @@
 import { getCurrentEdition } from "@/lib/data";
-import { EditionScreen } from "@/components/EditionScreen";
+import { CheckoutScreen } from "@/components/CheckoutScreen";
 import { NoEditionScreen } from "@/components/NoEditionScreen";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function FinalizarPage() {
   const bundle = await getCurrentEdition();
-
   if (!bundle) return <NoEditionScreen />;
 
   return (
-    <EditionScreen
+    <CheckoutScreen
       edition={bundle.edition}
-      initialProducts={bundle.products}
+      products={bundle.products}
       windows={bundle.windows}
       neighborhoods={bundle.neighborhoods}
     />
