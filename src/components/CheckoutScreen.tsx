@@ -7,6 +7,7 @@ import { useCart } from "@/lib/cart-context";
 import { useDialog } from "@/lib/dialog-context";
 import { useSwipeBack } from "@/lib/useSwipeBack";
 import { createClient } from "@/lib/supabase/client";
+import { silentlyLinkExistingSubscription } from "@/lib/push";
 import { formatCents, formatDate, formatWeekday } from "@/lib/format";
 import { QtyStepper } from "./QtyStepper";
 import type {
@@ -152,6 +153,7 @@ export function CheckoutScreen({
 
     const result = data as { public_token: string };
     clear();
+    silentlyLinkExistingSubscription(result.public_token);
     router.push(`/pedido/${result.public_token}`);
   }
 

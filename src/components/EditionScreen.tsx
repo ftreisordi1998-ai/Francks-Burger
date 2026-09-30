@@ -10,6 +10,7 @@ import { SocialFooter } from "./SocialFooter";
 import { useCart } from "@/lib/cart-context";
 import { useDialog } from "@/lib/dialog-context";
 import { createClient } from "@/lib/supabase/client";
+import { ensurePushSubscription, isPushSupported } from "@/lib/push";
 import { formatDate, formatDateTime, formatWeekday } from "@/lib/format";
 import {
   canOrder,
@@ -32,6 +33,8 @@ export function EditionScreen({
 }) {
   const [products, setProducts] = useState(initialProducts);
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
+  const [showPushPrompt, setShowPushPrompt] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
   const { setEdition, getQty, getLinesForProduct, upsertLine, updateLineQty, removeLine } =
     useCart();
   const { alertDialog } = useDialog();
@@ -39,6 +42,24 @@ export function EditionScreen({
   useEffect(() => {
     setEdition(edition.id);
   }, [edition.id, setEdition]);
+
+  useEffect(() => {
+    if (isPushSupported() && Notification.permission === "default") {
+      setShowPushPrompt(true);
+    }
+  }, []);
+
+  async function handleAllowNotifications() {
+    setPushBusy(true);
+    try {
+      await ensurePushSubscription();
+    } catch {
+      // denied or unsupported — nothing else to do, hide the prompt either way
+    } finally {
+      setPushBusy(false);
+      setShowPushPrompt(false);
+    }
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -83,6 +104,22 @@ export function EditionScreen({
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col pb-32 lg:max-w-[1140px]">
+      {showPushPrompt && (
+        <div className="mx-5 mt-[calc(env(safe-area-inset-top)+14px)] flex flex-col gap-2 rounded-2xl bg-orange-soft px-4 py-3.5 lg:mx-8">
+          <p className="text-sm font-bold text-orange-dark">Permitir notificações de pedidos</p>
+          <p className="text-sm text-coffee">
+            Quando o seu pedido for confirmado, você recebe um aviso direto no celular.
+          </p>
+          <button
+            onClick={handleAllowNotifications}
+            disabled={pushBusy}
+            className="mt-1 self-start rounded-xl bg-orange px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+          >
+            {pushBusy ? "Ativando…" : "Permitir notificações"}
+          </button>
+        </div>
+      )}
+
       <header className="px-5 pb-4 pt-[calc(env(safe-area-inset-top)+18px)] lg:px-8 lg:pt-10">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-center gap-3">

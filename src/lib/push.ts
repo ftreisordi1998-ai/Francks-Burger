@@ -23,24 +23,32 @@ export async function getExistingPushSubscription() {
   return registration.pushManager.getSubscription();
 }
 
-export async function subscribeToOrderPush(orderToken: string) {
+/**
+ * Registers the service worker and creates a browser push subscription,
+ * requesting permission if needed. Does not associate it with any order yet.
+ */
+export async function ensurePushSubscription(): Promise<PushSubscription> {
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   if (!vapidPublicKey) throw new Error("VAPID_NOT_CONFIGURED");
 
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") throw new Error("PERMISSION_DENIED");
+  if (Notification.permission !== "granted") {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") throw new Error("PERMISSION_DENIED");
+  }
 
   const registration = await navigator.serviceWorker.register("/sw.js");
   await navigator.serviceWorker.ready;
 
-  let subscription = await registration.pushManager.getSubscription();
-  if (!subscription) {
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-    });
-  }
+  const existing = await registration.pushManager.getSubscription();
+  if (existing) return existing;
 
+  return registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+  });
+}
+
+export async function linkPushSubscriptionToOrder(orderToken: string, subscription: PushSubscription) {
   const json = subscription.toJSON();
   const supabase = createClient();
   const { error } = await supabase.rpc("subscribe_order_push", {
@@ -50,6 +58,22 @@ export async function subscribeToOrderPush(orderToken: string) {
     p_auth: json.keys?.auth,
   });
   if (error) throw error;
+}
 
+/** Used on the order tracking page as a fallback for people who land there directly. */
+export async function subscribeToOrderPush(orderToken: string) {
+  const subscription = await ensurePushSubscription();
+  await linkPushSubscriptionToOrder(orderToken, subscription);
   return subscription;
+}
+
+/** Silently attaches an already-granted subscription to a freshly created order, with no prompt. */
+export async function silentlyLinkExistingSubscription(orderToken: string) {
+  if (!isPushSupported() || Notification.permission !== "granted") return;
+  try {
+    const subscription = await ensurePushSubscription();
+    await linkPushSubscriptionToOrder(orderToken, subscription);
+  } catch {
+    // best-effort — never block checkout on this
+  }
 }
