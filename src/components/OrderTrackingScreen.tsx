@@ -206,10 +206,12 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
             <span>Subtotal</span>
             <span>{formatCents(order.subtotal_cents)}</span>
           </div>
-          {order.delivery_fee_cents > 0 && (
+          {order.fulfillment_type === "delivery" && (
             <div className="flex justify-between text-coffee-soft">
               <span>Taxa de entrega</span>
-              <span>{formatCents(order.delivery_fee_cents)}</span>
+              <span>
+                {order.delivery_fee_cents > 0 ? formatCents(order.delivery_fee_cents) : "Grátis"}
+              </span>
             </div>
           )}
           <div className="flex justify-between text-base font-extrabold text-coffee">
