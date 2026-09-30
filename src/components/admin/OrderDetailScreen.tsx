@@ -38,6 +38,7 @@ export function OrderDetailScreen({
   const [busy, setBusy] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [showCancel, setShowCancel] = useState(false);
+  const [notifyState, setNotifyState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const router = useRouter();
   const { confirmDialog, alertDialog } = useDialog();
 
@@ -87,6 +88,25 @@ export function OrderDetailScreen({
       .single();
     if (data) setOrder(data as unknown as AdminOrderRow);
     setBusy(false);
+    if (next === "confirmed") {
+      notifyCustomer();
+    }
+  }
+
+  async function notifyCustomer() {
+    setNotifyState("sending");
+    try {
+      const res = await fetch("/api/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+      if (!res.ok) throw new Error();
+      setNotifyState("sent");
+      setOrder((o) => ({ ...o, confirmation_notified_at: new Date().toISOString() }));
+    } catch {
+      setNotifyState("error");
+    }
   }
 
   async function cancelOrder() {
@@ -269,10 +289,36 @@ export function OrderDetailScreen({
                 Marcar como &ldquo;{ORDER_STATUS_LABEL[nextStatus]}&rdquo;
               </ActionButton>
             )}
+            <ActionButton
+              onClick={notifyCustomer}
+              disabled={busy || notifyState === "sending"}
+              variant="ghost"
+            >
+              {notifyState === "sending"
+                ? "Enviando…"
+                : order.confirmation_notified_at
+                  ? "Reenviar notificação"
+                  : "Notificar cliente"}
+            </ActionButton>
             <ActionButton onClick={() => setShowCancel(true)} disabled={busy} variant="danger">
               Cancelar pedido
             </ActionButton>
           </div>
+          {notifyState === "sent" && (
+            <p className="text-xs font-semibold text-success">
+              Notificação enviada ao cliente.
+            </p>
+          )}
+          {notifyState === "error" && (
+            <p className="text-xs font-semibold text-danger">
+              Não foi possível enviar — o cliente talvez não tenha ativado notificações.
+            </p>
+          )}
+          {order.confirmation_notified_at && notifyState === "idle" && (
+            <p className="text-xs text-coffee-soft">
+              Notificado em {formatDateTime(order.confirmation_notified_at)}.
+            </p>
+          )}
 
           {showCancel && (
             <div className="mt-2 flex flex-col gap-2 rounded-xl bg-danger-bg p-3">

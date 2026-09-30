@@ -7,6 +7,7 @@ import { Badge } from "./Badge";
 import { createClient } from "@/lib/supabase/client";
 import { useSwipeBack } from "@/lib/useSwipeBack";
 import { PixPayment } from "./PixPayment";
+import { getExistingPushSubscription, isPushSupported, subscribeToOrderPush } from "@/lib/push";
 import { formatCents, formatDateShort, formatDateTime } from "@/lib/format";
 import {
   ORDER_STATUS_LABEL,
@@ -16,10 +17,37 @@ import {
 } from "@/lib/status";
 import type { OrderTrackingView } from "@/lib/types";
 
+type PushCardState = "hidden" | "offer" | "subscribed" | "denied" | "error";
+
 export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingView }) {
   const [order, setOrder] = useState(initial);
+  const [pushState, setPushState] = useState<PushCardState>("hidden");
+  const [pushBusy, setPushBusy] = useState(false);
   const router = useRouter();
   useSwipeBack(() => router.push("/"));
+
+  useEffect(() => {
+    if (!isPushSupported()) return;
+    if (Notification.permission === "denied") {
+      setPushState("denied");
+      return;
+    }
+    getExistingPushSubscription().then((sub) => {
+      setPushState(sub ? "subscribed" : "offer");
+    });
+  }, []);
+
+  async function handleEnableNotifications() {
+    setPushBusy(true);
+    try {
+      await subscribeToOrderPush(order.public_token);
+      setPushState("subscribed");
+    } catch (err) {
+      setPushState(err instanceof Error && err.message === "PERMISSION_DENIED" ? "denied" : "error");
+    } finally {
+      setPushBusy(false);
+    }
+  }
 
   useEffect(() => {
     // Pedidos não têm leitura pública por segurança (evita listar/vasculhar
@@ -81,6 +109,34 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
           {PAYMENT_STATUS_LABEL[order.payment_status]}
         </Badge>
       </div>
+
+      {pushState === "offer" && (
+        <section className="mt-4 flex flex-col gap-2 rounded-2xl bg-orange-soft px-4 py-3.5">
+          <p className="text-sm font-bold text-orange-dark">Permitir notificações de pedidos</p>
+          <p className="text-sm text-coffee">
+            Quando o seu pedido for confirmado, você recebe um aviso direto no celular — sem
+            precisar ficar checando esta página.
+          </p>
+          <button
+            onClick={handleEnableNotifications}
+            disabled={pushBusy}
+            className="mt-1 self-start rounded-xl bg-orange px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+          >
+            {pushBusy ? "Ativando…" : "Ativar notificações"}
+          </button>
+        </section>
+      )}
+      {pushState === "subscribed" && (
+        <section className="mt-4 rounded-2xl bg-success-bg px-4 py-3 text-sm font-semibold text-success">
+          Notificações ativadas — você será avisado quando seu pedido for confirmado.
+        </section>
+      )}
+      {pushState === "denied" && (
+        <section className="mt-4 rounded-2xl bg-cream-soft px-4 py-3 text-xs text-coffee-soft">
+          As notificações estão bloqueadas no seu navegador. Para ativar, permita notificações
+          para este site nas configurações do celular/navegador.
+        </section>
+      )}
 
       <section className="mt-5 rounded-2xl bg-white p-4">
         <p className="text-sm font-bold text-coffee">{order.edition_title}</p>

@@ -178,6 +178,9 @@ export function ProductSheet({
                     className="rounded-xl bg-cream-soft px-3.5 py-2.5 text-coffee outline-none focus:ring-2 focus:ring-orange"
                     style={{ fontSize: 16 }}
                   />
+                  <span className="text-xs leading-snug text-coffee-soft">
+                    Precisa tirar algo do lanche? Adicione essa combinação separadamente.
+                  </span>
                 </label>
 
                 <div className="flex items-center justify-between">

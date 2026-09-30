@@ -126,6 +126,7 @@ export interface AdminOrderRow {
   created_at: string;
   expires_at: string | null;
   cancel_reason: string | null;
+  confirmation_notified_at: string | null;
   editions: { title: string; prep_date: string } | null;
 }
 
