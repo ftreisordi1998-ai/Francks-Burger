@@ -54,7 +54,6 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
   }, [reducedMotion, animEnabled]);
 
   const steamPlaying = animEnabled && tabVisible && steamInView && !reducedMotion;
-  const showAnim = animEnabled && !reducedMotion;
 
   function revealStyle(index: number): React.CSSProperties {
     if (reducedMotion) return {};
@@ -65,46 +64,47 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
     <div className="mx-auto flex min-h-dvh w-full max-w-[560px] flex-col px-5 pb-10 pt-[calc(env(safe-area-inset-top)+28px)]">
       <header className={reducedMotion ? "flex flex-col items-center text-center" : "links-reveal flex flex-col items-center text-center"} style={revealStyle(0)}>
         <Logo size={64} />
-        <h1 className="mt-4 text-[26px] font-extrabold leading-tight text-coffee">
+        <h1 className="mt-4 text-[28px] font-extrabold leading-[1.1] tracking-tight text-coffee sm:text-[30px]">
           Direto da brasa pra sua casa.
         </h1>
         <p className="mt-2 text-[15px] leading-relaxed text-coffee-soft">
           Burgers na brasa, por encomenda, uma vez por semana. Uraí · PR.
         </p>
+        <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12px] font-bold text-coffee shadow-[0_1px_2px_rgba(44,24,16,0.06),0_2px_8px_rgba(44,24,16,0.06)]">
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${ordersOpen ? "bg-success" : "bg-coffee-soft/50"}`}
+            aria-hidden
+          />
+          {ordersOpen ? "Encomendas abertas agora" : "Confira a próxima edição"}
+        </span>
       </header>
 
       <div
         ref={steamRef}
-        className={reducedMotion ? "relative mt-6 flex items-end justify-center gap-3" : "links-reveal relative mt-6 flex items-end justify-center gap-3"}
+        className={reducedMotion ? "relative mt-6 rounded-[28px] bg-white/60 p-3.5" : "links-reveal relative mt-6 rounded-[28px] bg-white/60 p-3.5"}
         style={revealStyle(1)}
       >
-        {LINKS_PAGE_PRODUCT_IMAGES.map((product, i) => (
-          <div key={product.name} className="relative">
-            <Steam active={steamPlaying} seed={i} />
-            <div className="relative z-10 h-[92px] w-[92px] overflow-hidden rounded-[22px] bg-cream-soft shadow-[0_6px_16px_rgba(44,24,16,0.1)] sm:h-[108px] sm:w-[108px]">
-              <Image
-                src={product.url}
-                alt={product.name}
-                fill
-                sizes="112px"
-                className="object-cover"
-                priority={i === 1}
-              />
+        <div className="flex items-end justify-center gap-2.5">
+          {LINKS_PAGE_PRODUCT_IMAGES.map((product, i) => (
+            <div key={product.name} className="relative">
+              <Steam active={steamPlaying} seed={i} />
+              <div className="relative z-10 h-[100px] w-[100px] overflow-hidden rounded-[20px] bg-cream-soft shadow-[0_10px_20px_-8px_rgba(44,24,16,0.28)] sm:h-[120px] sm:w-[120px]">
+                <Image
+                  src={product.url}
+                  alt={product.name}
+                  fill
+                  sizes="130px"
+                  className="object-cover"
+                  priority={i === 1}
+                />
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-
-      <div
-        className={reducedMotion ? "mt-7 flex justify-center" : "links-reveal mt-7 flex justify-center"}
-        style={revealStyle(2)}
-        aria-hidden
-      >
-        <span className="h-px w-16 bg-gradient-to-r from-transparent via-orange/35 to-transparent" />
+          ))}
+        </div>
       </div>
 
       <div className="mt-5 flex flex-col gap-3">
-        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(3)}>
+        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(2)}>
           <Link
             href={LINKS_PAGE_URLS.order}
             className={`group flex min-h-[76px] w-full flex-col items-start justify-center gap-0.5 rounded-[20px] bg-orange px-5 py-4 text-left shadow-[0_8px_20px_-6px_rgba(232,84,15,0.35)] transition duration-150 [transition-property:transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_14px_28px_-6px_rgba(232,84,15,0.45)] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-dark focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
@@ -115,23 +115,20 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
               Pedidos
             </span>
             <span className="flex w-full items-center justify-between gap-3">
-              <span className="text-[17px] font-extrabold text-white">Faça sua encomenda</span>
-              <ArrowIcon className="shrink-0 text-white transition-transform duration-150 group-hover:translate-x-0.5" />
+              <span className="text-[19px] font-extrabold tracking-tight text-white">
+                Faça sua encomenda
+              </span>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-white transition-transform duration-150 group-hover:translate-x-0.5">
+                <ArrowIcon />
+              </span>
             </span>
             <span className="text-[13px] font-medium text-white/85">
               Escolha seu burger e confira a próxima edição.
             </span>
-            <span className="mt-1 flex items-center gap-1.5 text-[12px] font-semibold text-white/75">
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${ordersOpen ? "bg-white" : "bg-white/60"}`}
-                aria-hidden
-              />
-              {ordersOpen ? "Encomendas abertas" : "Confira a próxima edição"}
-            </span>
           </Link>
         </div>
 
-        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(4)}>
+        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(3)}>
           <a
             href={LINKS_PAGE_URLS.whatsappGroup}
             target="_blank"
@@ -162,7 +159,7 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
           </p>
         </div>
 
-        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(5)}>
+        <div className={reducedMotion ? "" : "links-reveal"} style={revealStyle(4)}>
           <a
             href={LINKS_PAGE_URLS.instagram}
             target="_blank"
@@ -186,7 +183,7 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
         </div>
       </div>
 
-      <section className={reducedMotion ? "mt-8" : "links-reveal mt-8"} style={revealStyle(6)}>
+      <section className={reducedMotion ? "mt-8" : "links-reveal mt-8"} style={revealStyle(5)}>
         <h2 className="text-[11px] font-extrabold uppercase tracking-wide text-coffee-soft">
           Como funciona
         </h2>
@@ -203,7 +200,7 @@ export function LinksScreen({ ordersOpen }: { ordersOpen: boolean }) {
         </ol>
       </section>
 
-      <footer className={reducedMotion ? "mt-10 flex flex-col items-center gap-2 text-center" : "links-reveal mt-10 flex flex-col items-center gap-2 text-center"} style={revealStyle(7)}>
+      <footer className={reducedMotion ? "mt-10 flex flex-col items-center gap-2 text-center" : "links-reveal mt-10 flex flex-col items-center gap-2 text-center"} style={revealStyle(6)}>
         <Logo size={28} />
         <p className="text-[12px] font-semibold text-coffee-soft">Franck&rsquo;s Burger · Uraí, PR</p>
       </footer>
