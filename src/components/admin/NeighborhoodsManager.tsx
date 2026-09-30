@@ -100,37 +100,42 @@ export function NeighborhoodsManager({
 
       <div className={`flex flex-col gap-2 ${freeDelivery ? "opacity-50" : ""}`}>
         {neighborhoods.map((n) => (
-          <div key={n.id} className="flex items-center gap-2 rounded-xl bg-cream-soft p-3">
+          <div
+            key={n.id}
+            className="flex flex-col gap-2.5 rounded-xl bg-cream-soft p-3 sm:flex-row sm:items-center"
+          >
             <input
               defaultValue={n.name}
               onBlur={(e) => save(n.id, { name: e.target.value })}
-              className="flex-1 rounded-lg bg-white px-3 py-2 text-sm font-semibold"
+              className="min-h-11 flex-1 rounded-lg bg-white px-3 py-2 text-sm font-semibold"
               style={{ fontSize: 16 }}
             />
-            <label className="flex items-center gap-1.5 text-xs font-semibold text-coffee-soft">
-              Taxa (R$)
-              <input
-                type="number"
-                step="0.01"
-                defaultValue={(n.delivery_fee_cents / 100).toFixed(2)}
-                onBlur={(e) =>
-                  save(n.id, { delivery_fee_cents: Math.round(Number(e.target.value) * 100) })
-                }
-                className="w-24 rounded-lg bg-white px-2 py-1.5 text-sm"
-                style={{ fontSize: 16 }}
-              />
-            </label>
-            <label className="flex items-center gap-1.5 text-xs font-semibold text-coffee-soft">
-              <input
-                type="checkbox"
-                checked={n.active}
-                onChange={(e) => save(n.id, { active: e.target.checked })}
-              />
-              Ativo
-            </label>
+            <div className="flex items-center justify-between gap-3 sm:justify-start">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-coffee-soft">
+                Taxa (R$)
+                <input
+                  type="number"
+                  step="0.01"
+                  defaultValue={(n.delivery_fee_cents / 100).toFixed(2)}
+                  onBlur={(e) =>
+                    save(n.id, { delivery_fee_cents: Math.round(Number(e.target.value) * 100) })
+                  }
+                  className="min-h-11 w-24 rounded-lg bg-white px-2 py-1.5 text-sm"
+                  style={{ fontSize: 16 }}
+                />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-coffee-soft">
+                <input
+                  type="checkbox"
+                  checked={n.active}
+                  onChange={(e) => save(n.id, { active: e.target.checked })}
+                />
+                Ativo
+              </label>
+            </div>
             <button
               onClick={() => handleDelete(n)}
-              className="rounded-lg bg-danger-bg px-3 py-1.5 text-xs font-bold text-danger"
+              className="min-h-11 shrink-0 rounded-lg bg-danger-bg px-3 py-1.5 text-xs font-bold text-danger"
             >
               Excluir
             </button>

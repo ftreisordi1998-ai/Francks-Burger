@@ -95,7 +95,7 @@ export function EditionsListScreen({ initialEditions }: { initialEditions: Editi
           <Link
             key={edition.id}
             href={`/admin/edicoes/${edition.id}`}
-            className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3.5 hover:bg-cream-soft/60"
+            className="flex flex-col gap-3 rounded-2xl bg-white px-4 py-3.5 hover:bg-cream-soft/60 sm:flex-row sm:items-center sm:justify-between"
           >
             <div className="min-w-0">
               <p className="truncate font-bold text-coffee">
@@ -104,7 +104,7 @@ export function EditionsListScreen({ initialEditions }: { initialEditions: Editi
               </p>
               <p className="text-sm text-coffee-soft">Preparo em {formatDateShort(edition.prep_date)}</p>
             </div>
-            <div className="flex shrink-0 items-center gap-3">
+            <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
               <div
                 onClick={(e) => {
                   e.preventDefault();
@@ -118,12 +118,12 @@ export function EditionsListScreen({ initialEditions }: { initialEditions: Editi
                   disabled={togglingId === edition.id}
                   onChange={(next) => handleToggleOpen(edition, next)}
                 />
+                <Badge tone={STATUS_TONE[edition.status]}>{STATUS_LABEL[edition.status]}</Badge>
               </div>
-              <Badge tone={STATUS_TONE[edition.status]}>{STATUS_LABEL[edition.status]}</Badge>
               <button
                 onClick={(e) => handleDelete(edition, e)}
                 disabled={busyId === edition.id}
-                className="rounded-lg bg-danger-bg px-3 py-1.5 text-xs font-bold text-danger disabled:opacity-50"
+                className="min-h-11 shrink-0 rounded-lg bg-danger-bg px-3 py-1.5 text-xs font-bold text-danger disabled:opacity-50"
               >
                 {busyId === edition.id ? "Excluindo…" : "Excluir"}
               </button>

@@ -245,23 +245,23 @@ export function EditionEditorScreen({
         ← Voltar às edições
       </Link>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <input
           value={edition.title}
           onChange={(e) => setEdition({ ...edition, title: e.target.value })}
-          className="rounded-xl bg-transparent text-xl font-extrabold text-coffee outline-none focus:bg-white focus:px-2 focus:py-1"
+          className="min-h-11 w-full rounded-xl bg-white px-2.5 py-2 text-xl font-extrabold text-coffee outline-none focus:ring-2 focus:ring-orange sm:w-auto sm:flex-1 sm:bg-transparent sm:px-2 sm:py-1 sm:focus:bg-white"
         />
         <div className="flex gap-2">
           <button
             onClick={duplicateEdition}
-            className="rounded-xl bg-cream-soft px-3.5 py-2 text-sm font-bold text-coffee"
+            className="min-h-11 flex-1 rounded-xl bg-cream-soft px-3.5 py-2 text-sm font-bold text-coffee sm:flex-none"
           >
             Duplicar
           </button>
           {edition.status !== "closed" && (
             <button
               onClick={() => setEdition({ ...edition, status: "closed" as EditionStatus })}
-              className="rounded-xl bg-danger-bg px-3.5 py-2 text-sm font-bold text-danger"
+              className="min-h-11 flex-1 rounded-xl bg-danger-bg px-3.5 py-2 text-sm font-bold text-danger sm:flex-none"
             >
               Encerrar
             </button>
@@ -504,9 +504,10 @@ export function EditionEditorScreen({
       <style jsx global>{`
         .input {
           width: 100%;
-          border-radius: 12px;
+          min-height: 44px;
+          border-radius: 14px;
           background: var(--color-cream-soft);
-          padding: 10px 12px;
+          padding: 12px 14px;
           font-size: 16px;
           color: var(--color-coffee);
         }
