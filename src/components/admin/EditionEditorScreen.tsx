@@ -73,7 +73,8 @@ export function EditionEditorScreen({
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const router = useRouter();
-  const { alertDialog } = useDialog();
+  const { alertDialog, confirmDialog } = useDialog();
+  const [deleting, setDeleting] = useState(false);
 
   const dirty = useMemo(
     () => JSON.stringify(pickEditable(edition)) !== JSON.stringify(pickEditable(savedEdition)),
@@ -202,6 +203,39 @@ export function EditionEditorScreen({
       );
     }
     router.push(`/admin/edicoes/${newEdition.id}`);
+  }
+
+  async function deleteEdition() {
+    const ok = await confirmDialog({
+      title: `Excluir "${edition.title}"?`,
+      message:
+        "Isso apaga a edição, seus sabores, janelas e bairros para sempre. Não pode ser desfeito.",
+      confirmLabel: "Excluir para sempre",
+      destructive: true,
+    });
+    if (!ok) return;
+    setDeleting(true);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("admin_delete_edition", { p_edition_id: edition.id });
+    setDeleting(false);
+    if (error) {
+      if (error.message.includes("HAS_ORDERS")) {
+        await alertDialog({
+          title: "Não é possível excluir",
+          message:
+            "Esta edição já tem pedidos registrados. Para preservar o histórico, edições com pedidos não podem ser apagadas — encerre-a em vez disso.",
+          tone: "danger",
+        });
+      } else {
+        await alertDialog({
+          title: "Não foi possível excluir",
+          message: "Tente novamente em instantes.",
+          tone: "danger",
+        });
+      }
+      return;
+    }
+    router.push("/admin/edicoes");
   }
 
   return (
@@ -405,6 +439,22 @@ export function EditionEditorScreen({
         freeDelivery={edition.free_delivery}
         onToggleFreeDelivery={(value) => setEdition({ ...edition, free_delivery: value })}
       />
+
+      <section className="mt-4 rounded-2xl bg-white p-4">
+        <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">
+          Zona de risco
+        </h2>
+        <p className="mt-1 text-xs text-coffee-soft">
+          Só é possível excluir edições sem nenhum pedido registrado — isso preserva o histórico.
+        </p>
+        <button
+          onClick={deleteEdition}
+          disabled={deleting}
+          className="mt-3 rounded-xl bg-danger-bg px-4 py-2.5 text-sm font-bold text-danger disabled:opacity-50"
+        >
+          {deleting ? "Excluindo…" : "Excluir edição"}
+        </button>
+      </section>
 
       <div className="h-24" />
 
