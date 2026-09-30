@@ -28,6 +28,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/admin/pedidos" className="hover:text-orange">
               Pedidos
             </Link>
+            <Link href="/admin/producao" className="hover:text-orange">
+              Produção
+            </Link>
             <Link href="/admin/edicoes" className="hover:text-orange">
               Edições
             </Link>
@@ -39,11 +42,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <Link href="/admin/pedidos" className="hover:text-orange">
           Pedidos
         </Link>
+        <Link href="/admin/producao" className="hover:text-orange">
+          Produção
+        </Link>
         <Link href="/admin/edicoes" className="hover:text-orange">
           Edições
         </Link>
       </nav>
-      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">{children}</main>
+      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 [&:has(#production-full-width)]:max-w-[1800px]">
+        {children}
+      </main>
     </div>
   );
 }
