@@ -49,6 +49,15 @@ export function EditionScreen({
     }
   }, []);
 
+  useEffect(() => {
+    if (!showPushPrompt) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, [showPushPrompt]);
+
   async function handleAllowNotifications() {
     setPushBusy(true);
     try {
@@ -105,18 +114,38 @@ export function EditionScreen({
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col pb-32 lg:max-w-[1140px]">
       {showPushPrompt && (
-        <div className="mx-5 mt-[calc(env(safe-area-inset-top)+14px)] flex flex-col gap-2 rounded-2xl bg-orange-soft px-4 py-3.5 lg:mx-8">
-          <p className="text-sm font-bold text-orange-dark">Permitir notificações de pedidos</p>
-          <p className="text-sm text-coffee">
-            Quando o seu pedido for confirmado, você recebe um aviso direto no celular.
-          </p>
-          <button
-            onClick={handleAllowNotifications}
-            disabled={pushBusy}
-            className="mt-1 self-start rounded-xl bg-orange px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6">
+          <div className="animate-fade-in absolute inset-0 bg-coffee/40 backdrop-blur-sm" aria-hidden />
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="push-prompt-title"
+            className="animate-dialog-pop relative flex w-full max-w-[320px] flex-col items-center gap-2 overflow-hidden rounded-[22px] bg-cream px-6 pb-6 pt-7 text-center shadow-2xl"
           >
-            {pushBusy ? "Ativando…" : "Permitir notificações"}
-          </button>
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-soft text-orange">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path
+                  d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <h2 id="push-prompt-title" className="mt-1 text-[17px] font-extrabold leading-tight text-coffee">
+              Permitir notificações de pedidos
+            </h2>
+            <p className="text-[14px] leading-relaxed text-coffee-soft">
+              Quando o seu pedido for confirmado, você recebe um aviso direto no celular.
+            </p>
+            <button
+              onClick={handleAllowNotifications}
+              disabled={pushBusy}
+              className="mt-3 w-full rounded-xl bg-orange py-3 text-[15px] font-bold text-white disabled:opacity-50"
+            >
+              {pushBusy ? "Ativando…" : "Permitir notificações"}
+            </button>
+          </div>
         </div>
       )}
 
