@@ -21,7 +21,7 @@ import {
 import type { DeliveryWindow, Edition, Neighborhood, Product } from "@/lib/types";
 
 export function EditionScreen({
-  edition,
+  edition: initialEdition,
   initialProducts,
   windows,
   neighborhoods,
@@ -31,7 +31,9 @@ export function EditionScreen({
   windows: DeliveryWindow[];
   neighborhoods: Neighborhood[];
 }) {
+  const [edition, setEditionData] = useState(initialEdition);
   const [products, setProducts] = useState(initialProducts);
+  const [clockTick, setClockTick] = useState(0);
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
   const [pushModal, setPushModal] = useState<"hidden" | "ask" | "ios-install">("hidden");
   const [pushBusy, setPushBusy] = useState(false);
@@ -95,13 +97,32 @@ export function EditionScreen({
           );
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "editions", filter: `id=eq.${edition.id}` },
+        (payload) => {
+          setEditionData((prev) => ({ ...prev, ...(payload.new as Edition) }));
+        }
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
   }, [edition.id]);
 
-  const situation = useMemo(() => getEditionSituation(edition, products), [edition, products]);
+  // Abertura/fechamento agendados (opens_at / order_deadline) não disparam nenhuma
+  // escrita no banco no instante exato — sem isso, quem já estivesse com a página
+  // aberta só veria a mudança depois de um F5.
+  useEffect(() => {
+    const interval = setInterval(() => setClockTick((t) => t + 1), 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const situation = useMemo(
+    () => getEditionSituation(edition, products),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [edition, products, clockTick]
+  );
   const orderingEnabled = canOrder(situation);
 
   const deliveryWindows = windows.filter((w) => w.type === "delivery");
