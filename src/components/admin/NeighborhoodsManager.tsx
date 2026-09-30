@@ -8,10 +8,14 @@ export function NeighborhoodsManager({
   editionId,
   neighborhoods,
   onChange,
+  freeDelivery,
+  onToggleFreeDelivery,
 }: {
   editionId: string;
   neighborhoods: Neighborhood[];
   onChange: (neighborhoods: Neighborhood[]) => void;
+  freeDelivery: boolean;
+  onToggleFreeDelivery: (value: boolean) => void;
 }) {
   const { confirmDialog, alertDialog } = useDialog();
   async function addNeighborhood() {
@@ -78,7 +82,23 @@ export function NeighborhoodsManager({
           + Adicionar bairro
         </button>
       </div>
-      <div className="flex flex-col gap-2">
+
+      <label className="flex items-center gap-2 rounded-xl bg-orange-soft/50 px-3.5 py-3 text-sm">
+        <input
+          type="checkbox"
+          checked={freeDelivery}
+          onChange={(e) => onToggleFreeDelivery(e.target.checked)}
+        />
+        <span className="font-bold text-coffee">Frete grátis para todos os bairros</span>
+      </label>
+      {freeDelivery && (
+        <p className="-mt-2 px-1 text-xs text-coffee-soft">
+          Ativado: a taxa de entrega sai R$ 0,00 para todo mundo nesta edição, mesmo com valores
+          cadastrados abaixo. Lembre-se de desativar quando a promoção acabar.
+        </p>
+      )}
+
+      <div className={`flex flex-col gap-2 ${freeDelivery ? "opacity-50" : ""}`}>
         {neighborhoods.map((n) => (
           <div key={n.id} className="flex items-center gap-2 rounded-xl bg-cream-soft p-3">
             <input

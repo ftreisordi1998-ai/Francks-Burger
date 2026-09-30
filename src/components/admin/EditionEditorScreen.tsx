@@ -25,6 +25,7 @@ const EDITABLE_FIELDS = [
   "accepts_cash_on_delivery",
   "pickup_enabled",
   "pickup_address",
+  "free_delivery",
   "notes_public",
 ] as const;
 
@@ -401,6 +402,8 @@ export function EditionEditorScreen({
         editionId={edition.id}
         neighborhoods={neighborhoods}
         onChange={setNeighborhoods}
+        freeDelivery={edition.free_delivery}
+        onToggleFreeDelivery={(value) => setEdition({ ...edition, free_delivery: value })}
       />
 
       <div className="h-24" />

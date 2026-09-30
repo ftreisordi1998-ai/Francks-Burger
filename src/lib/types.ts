@@ -27,6 +27,7 @@ export interface Edition {
   accepts_cash_on_delivery: boolean;
   pickup_enabled: boolean;
   pickup_address: string | null;
+  free_delivery: boolean;
   notes_public: string | null;
   is_demo: boolean;
   created_at: string;

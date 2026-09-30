@@ -80,8 +80,9 @@ export function CheckoutScreen({
 
   const availableWindows = windows.filter((w) => w.type === fulfillment);
   const neighborhood = neighborhoods.find((n) => n.id === neighborhoodId);
-  const feeKnown = fulfillment !== "delivery" || !!neighborhoodId;
-  const deliveryFeeCents = fulfillment === "delivery" ? neighborhood?.delivery_fee_cents ?? 0 : 0;
+  const feeKnown = fulfillment !== "delivery" || !!neighborhoodId || edition.free_delivery;
+  const deliveryFeeCents =
+    fulfillment === "delivery" && !edition.free_delivery ? neighborhood?.delivery_fee_cents ?? 0 : 0;
   const totalCents = subtotalCents + deliveryFeeCents;
 
   const productMap = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
@@ -495,7 +496,13 @@ export function CheckoutScreen({
             {fulfillment === "delivery" && (
               <SummaryRow
                 label="Taxa de entrega"
-                value={feeKnown ? formatCents(deliveryFeeCents) : "A calcular"}
+                value={
+                  edition.free_delivery
+                    ? "Grátis"
+                    : feeKnown
+                      ? formatCents(deliveryFeeCents)
+                      : "A calcular"
+                }
                 muted={!feeKnown}
               />
             )}
