@@ -384,7 +384,8 @@ export function CheckoutScreen({
                     <option value="">Selecione seu bairro</option>
                     {neighborhoods.map((n) => (
                       <option key={n.id} value={n.id}>
-                        {n.name} — {formatCents(n.delivery_fee_cents)}
+                        {n.name}
+                        {!edition.free_delivery && ` — ${formatCents(n.delivery_fee_cents)}`}
                       </option>
                     ))}
                   </select>
