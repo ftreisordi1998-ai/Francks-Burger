@@ -69,6 +69,7 @@ export function EditionEditorScreen({
   const [edition, setEdition] = useState(initialEdition);
   const [savedEdition, setSavedEdition] = useState(initialEdition);
   const savedEditionRef = useRef(initialEdition);
+  const channelSuffix = useRef(Math.random().toString(36).slice(2)).current;
   useEffect(() => {
     savedEditionRef.current = savedEdition;
   }, [savedEdition]);
@@ -106,7 +107,7 @@ export function EditionEditorScreen({
       if (session) supabase.realtime.setAuth(session.access_token);
 
       channel = supabase
-        .channel(`admin-edition-${initialEdition.id}`)
+        .channel(`admin-edition-${initialEdition.id}-${channelSuffix}`)
         .on(
           "postgres_changes",
           { event: "UPDATE", schema: "public", table: "editions", filter: `id=eq.${initialEdition.id}` },
@@ -190,12 +191,27 @@ export function EditionEditorScreen({
 
   async function duplicateEdition() {
     const supabase = createClient();
+    // Edições são semanais: copiar a data/prazo exatos deixaria a cópia já
+    // "vencida" (prazo no passado) assim que criada — adianta tudo em 7 dias
+    // por padrão, o admin ainda pode ajustar na tela antes de abrir.
+    const addWeek = (iso: string) => {
+      const d = new Date(iso);
+      d.setDate(d.getDate() + 7);
+      return d.toISOString();
+    };
+    // prep_date é um `date` puro (sem hora) — soma em string evita o fuso
+    // horário local deslocar o dia ao converter de/para objeto Date.
+    const addWeekToDateOnly = (dateOnly: string) => {
+      const [y, m, d] = dateOnly.split("-").map(Number);
+      const next = new Date(Date.UTC(y, m - 1, d + 7));
+      return next.toISOString().slice(0, 10);
+    };
     const { data: newEdition, error } = await supabase
       .from("editions")
       .insert({
         title: `${edition.title} (cópia)`,
-        prep_date: edition.prep_date,
-        order_deadline: edition.order_deadline,
+        prep_date: addWeekToDateOnly(edition.prep_date),
+        order_deadline: addWeek(edition.order_deadline),
         status: "draft",
         reservation_expiry_minutes: edition.reservation_expiry_minutes,
         payment_deadline_hours: edition.payment_deadline_hours,
@@ -233,8 +249,8 @@ export function EditionEditorScreen({
           edition_id: newEdition.id,
           type: w.type,
           label: w.label,
-          starts_at: w.starts_at,
-          ends_at: w.ends_at,
+          starts_at: addWeek(w.starts_at),
+          ends_at: addWeek(w.ends_at),
           capacity_burgers: w.capacity_burgers,
           reserved_burgers: 0,
           active: w.active,

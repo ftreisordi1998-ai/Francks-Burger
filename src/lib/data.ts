@@ -11,6 +11,11 @@ export interface EditionBundle {
 export async function getCurrentEdition(): Promise<EditionBundle | null> {
   const supabase = await createClient();
 
+  // Não há cron configurado: reservas de pedidos Pix nunca confirmados expiram
+  // "preguiçosamente" aqui, a cada carregamento da home — libera estoque e vaga
+  // de janela antes de montar a resposta, sem precisar de infra extra.
+  await supabase.rpc("release_expired_orders");
+
   const { data: editions } = await supabase
     .from("editions")
     .select("*")

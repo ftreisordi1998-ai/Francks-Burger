@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/Badge";
 import { useDialog } from "@/lib/dialog-context";
 import { createClient } from "@/lib/supabase/client";
-import { formatDateShort } from "@/lib/format";
+import { formatDateShort, formatDateTime } from "@/lib/format";
 import { NewEditionButton } from "./NewEditionButton";
 import { ToggleSwitch } from "./ToggleSwitch";
 import type { Edition } from "@/lib/types";
@@ -29,6 +29,7 @@ export function EditionsListScreen({ initialEditions }: { initialEditions: Editi
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const { confirmDialog, alertDialog } = useDialog();
   const router = useRouter();
+  const channelSuffix = useRef(Math.random().toString(36).slice(2)).current;
 
   useEffect(() => {
     const supabase = createClient();
@@ -43,7 +44,7 @@ export function EditionsListScreen({ initialEditions }: { initialEditions: Editi
       if (session) supabase.realtime.setAuth(session.access_token);
 
       channel = supabase
-        .channel("admin-editions-list")
+        .channel(`admin-editions-list-${channelSuffix}`)
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "editions" },
@@ -167,6 +168,11 @@ export function EditionsListScreen({ initialEditions }: { initialEditions: Editi
                   onChange={(next) => handleToggleOpen(edition, next)}
                 />
                 <Badge tone={STATUS_TONE[edition.status]}>{STATUS_LABEL[edition.status]}</Badge>
+                {edition.status === "open" &&
+                  edition.opens_at &&
+                  new Date(edition.opens_at) > new Date() && (
+                    <Badge tone="warning">Agendada p/ {formatDateTime(edition.opens_at)}</Badge>
+                  )}
               </div>
               <button
                 onClick={(e) => handleDelete(edition, e)}

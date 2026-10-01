@@ -78,6 +78,19 @@ export function OrderDetailScreen({
   }
 
   async function advanceStatus(next: OrderStatus) {
+    if (
+      order.payment_method === "pix" &&
+      order.payment_status === "pending" &&
+      (next === "out_for_delivery" || next === "delivered")
+    ) {
+      const ok = await confirmDialog({
+        title: "Pagamento ainda pendente",
+        message:
+          "Este pedido é Pix e ainda não foi marcado como pago. Confirmar mesmo assim que o pagamento foi recebido fora do sistema?",
+        confirmLabel: "Sim, já recebi",
+      });
+      if (!ok) return;
+    }
     setBusy(true);
     const supabase = createClient();
     const { data } = await supabase

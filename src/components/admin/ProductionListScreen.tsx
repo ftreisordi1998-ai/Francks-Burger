@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/Badge";
+import { useDialog } from "@/lib/dialog-context";
 import { createClient } from "@/lib/supabase/client";
 import { ORDER_STATUS_FLOW, ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/status";
-import type { EditionOption, FulfillmentType, OrderStatus, WindowType } from "@/lib/types";
+import type {
+  EditionOption,
+  FulfillmentType,
+  OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+  WindowType,
+} from "@/lib/types";
 
 interface ProductionItem {
   product_name_snapshot: string;
@@ -22,6 +30,8 @@ interface ProductionOrder {
   window_id: string | null;
   window_label_snapshot: string;
   order_status: OrderStatus;
+  payment_method: PaymentMethod;
+  payment_status: PaymentStatus;
   created_at: string;
   order_items: ProductionItem[];
 }
@@ -31,6 +41,17 @@ interface ProductionWindow {
   label: string;
   type: WindowType;
   starts_at: string;
+}
+
+interface DragState {
+  order: ProductionOrder;
+  width: number;
+  height: number;
+  offsetX: number;
+  offsetY: number;
+  x: number;
+  y: number;
+  overStatus: OrderStatus | null;
 }
 
 export function ProductionListScreen({
@@ -45,9 +66,13 @@ export function ProductionListScreen({
   orders: ProductionOrder[];
 }) {
   const router = useRouter();
+  const { confirmDialog } = useDialog();
   const [orders, setOrders] = useState(initialOrders);
   const [view, setView] = useState<"janela" | "kanban">("janela");
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const channelSuffix = useRef(Math.random().toString(36).slice(2)).current;
 
   useEffect(() => {
     setOrders(initialOrders);
@@ -64,7 +89,7 @@ export function ProductionListScreen({
       if (session) supabase.realtime.setAuth(session.access_token);
 
       channel = supabase
-        .channel("admin-production")
+        .channel(`admin-production-${channelSuffix}`)
         .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload) => {
           if (payload.eventType === "DELETE") {
             setOrders((prev) => prev.filter((o) => o.id !== (payload.old as { id: string }).id));
@@ -93,10 +118,21 @@ export function ProductionListScreen({
     };
   }, []);
 
-  async function advanceOrder(order: ProductionOrder) {
-    const idx = ORDER_STATUS_FLOW.indexOf(order.order_status);
-    const next = ORDER_STATUS_FLOW[idx + 1];
-    if (!next) return;
+  async function moveOrderTo(order: ProductionOrder, next: OrderStatus) {
+    if (next === order.order_status) return;
+    if (
+      order.payment_method === "pix" &&
+      order.payment_status === "pending" &&
+      (next === "out_for_delivery" || next === "delivered")
+    ) {
+      const ok = await confirmDialog({
+        title: "Pagamento ainda pendente",
+        message:
+          "Este pedido é Pix e ainda não foi marcado como pago. Confirmar mesmo assim que o pagamento foi recebido fora do sistema?",
+        confirmLabel: "Sim, já recebi",
+      });
+      if (!ok) return;
+    }
     setMovingId(order.id);
     const supabase = createClient();
     const { error } = await supabase.from("orders").update({ order_status: next }).eq("id", order.id);
@@ -111,6 +147,79 @@ export function ProductionListScreen({
         }).catch(() => {});
       }
     }
+  }
+
+  function advanceOrder(order: ProductionOrder) {
+    const next = ORDER_STATUS_FLOW[ORDER_STATUS_FLOW.indexOf(order.order_status) + 1];
+    if (next) moveOrderTo(order, next);
+  }
+
+  function handleCardPointerDown(e: React.PointerEvent<HTMLDivElement>, order: ProductionOrder) {
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    if ((e.target as HTMLElement).closest("button")) return;
+    const cardEl = e.currentTarget;
+    const rect = cardEl.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let activated = false;
+
+    const timer = window.setTimeout(() => {
+      activated = true;
+      const next: DragState = {
+        order,
+        width: rect.width,
+        height: rect.height,
+        offsetX: startX - rect.left,
+        offsetY: startY - rect.top,
+        x: rect.left,
+        y: rect.top,
+        overStatus: null,
+      };
+      dragRef.current = next;
+      setDrag(next);
+    }, 150);
+
+    function onMove(ev: PointerEvent) {
+      if (!activated) {
+        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > 8) {
+          window.clearTimeout(timer);
+          cleanup();
+        }
+        return;
+      }
+      ev.preventDefault();
+      const current = dragRef.current;
+      if (!current) return;
+      const x = ev.clientX - current.offsetX;
+      const y = ev.clientY - current.offsetY;
+      const overEl = document.elementFromPoint(ev.clientX, ev.clientY);
+      const columnEl = overEl?.closest<HTMLElement>("[data-kanban-status]");
+      const overStatus = (columnEl?.dataset.kanbanStatus as OrderStatus | undefined) ?? null;
+      const updated = { ...current, x, y, overStatus };
+      dragRef.current = updated;
+      setDrag(updated);
+    }
+
+    function onUp() {
+      window.clearTimeout(timer);
+      cleanup();
+      const final = dragRef.current;
+      dragRef.current = null;
+      setDrag(null);
+      if (activated && final?.overStatus && final.overStatus !== final.order.order_status) {
+        moveOrderTo(final.order, final.overStatus);
+      }
+    }
+
+    function cleanup() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
   }
 
   const groups = useMemo(() => {
@@ -230,61 +339,103 @@ export function ProductionListScreen({
             Nenhum pedido para listar nesta edição.
           </div>
         ) : (
-          <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
-            {kanbanColumns.map((col) => (
-              <div
-                key={col.status}
-                className="flex w-[260px] shrink-0 flex-col gap-2.5 rounded-2xl bg-cream-soft/60 p-3"
-              >
-                <div className="flex items-center justify-between gap-2 px-0.5">
-                  <h2 className="text-sm font-extrabold text-coffee">
-                    {ORDER_STATUS_LABEL[col.status]}
-                  </h2>
-                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-coffee-soft">
-                    {col.orders.length}
-                  </span>
-                </div>
-                <div className="flex flex-col gap-2">
-                  {col.orders.map((order) => {
-                    const nextStatus = ORDER_STATUS_FLOW[ORDER_STATUS_FLOW.indexOf(order.order_status) + 1];
-                    return (
-                      <div key={order.id} className="flex flex-col gap-2 rounded-xl bg-white p-3 shadow-sm">
-                        <div>
-                          <p className="text-sm font-bold text-coffee">{order.customer_name}</p>
-                          <p className="text-xs text-coffee-soft">{order.window_label_snapshot}</p>
+          <>
+            <p className="-mt-1 text-xs text-coffee-soft/70">
+              Segure e arraste um pedido para outra coluna, ou use o botão para avançar uma etapa.
+            </p>
+            <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+              {kanbanColumns.map((col) => (
+                <div
+                  key={col.status}
+                  data-kanban-status={col.status}
+                  className={`flex w-[260px] shrink-0 flex-col gap-2.5 rounded-2xl p-3 transition-colors ${
+                    drag && drag.overStatus === col.status && drag.order.order_status !== col.status
+                      ? "bg-orange-soft"
+                      : "bg-cream-soft/60"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 px-0.5">
+                    <h2 className="text-sm font-extrabold text-coffee">
+                      {ORDER_STATUS_LABEL[col.status]}
+                    </h2>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-coffee-soft">
+                      {col.orders.length}
+                    </span>
+                  </div>
+                  <div className="flex min-h-[40px] flex-col gap-2">
+                    {col.orders.map((order) => {
+                      const nextStatus = ORDER_STATUS_FLOW[ORDER_STATUS_FLOW.indexOf(order.order_status) + 1];
+                      const isDragging = drag?.order.id === order.id;
+                      return (
+                        <div
+                          key={order.id}
+                          onPointerDown={(e) => handleCardPointerDown(e, order)}
+                          className={`flex touch-none flex-col gap-2 rounded-xl bg-white p-3 shadow-sm transition-opacity ${
+                            isDragging ? "opacity-30" : "cursor-grab active:cursor-grabbing"
+                          }`}
+                        >
+                          <div>
+                            <p className="text-sm font-bold text-coffee">{order.customer_name}</p>
+                            <p className="text-xs text-coffee-soft">{order.window_label_snapshot}</p>
+                          </div>
+                          <ul className="flex flex-col gap-0.5">
+                            {order.order_items.map((item, i) => (
+                              <li key={i} className="text-xs text-coffee-soft">
+                                <span className="font-bold text-coffee">{item.qty}×</span>{" "}
+                                {item.product_name_snapshot}
+                                {item.customer_note && (
+                                  <span className="italic"> · &ldquo;{item.customer_note}&rdquo;</span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                          {nextStatus && (
+                            <button
+                              onClick={() => advanceOrder(order)}
+                              disabled={movingId === order.id}
+                              className="min-h-9 rounded-lg bg-orange-soft px-2.5 py-1.5 text-xs font-bold text-orange-dark disabled:opacity-50"
+                            >
+                              {movingId === order.id
+                                ? "Movendo…"
+                                : `Mover para "${ORDER_STATUS_LABEL[nextStatus]}" →`}
+                            </button>
+                          )}
                         </div>
-                        <ul className="flex flex-col gap-0.5">
-                          {order.order_items.map((item, i) => (
-                            <li key={i} className="text-xs text-coffee-soft">
-                              <span className="font-bold text-coffee">{item.qty}×</span>{" "}
-                              {item.product_name_snapshot}
-                              {item.customer_note && (
-                                <span className="italic"> · &ldquo;{item.customer_note}&rdquo;</span>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                        {nextStatus && (
-                          <button
-                            onClick={() => advanceOrder(order)}
-                            disabled={movingId === order.id}
-                            className="min-h-9 rounded-lg bg-orange-soft px-2.5 py-1.5 text-xs font-bold text-orange-dark disabled:opacity-50"
-                          >
-                            {movingId === order.id
-                              ? "Movendo…"
-                              : `Mover para "${ORDER_STATUS_LABEL[nextStatus]}" →`}
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {col.orders.length === 0 && (
-                    <p className="px-1 text-xs text-coffee-soft/70">Vazio</p>
-                  )}
+                      );
+                    })}
+                    {col.orders.length === 0 && (
+                      <p className="px-1 text-xs text-coffee-soft/70">Vazio</p>
+                    )}
+                  </div>
                 </div>
+              ))}
+            </div>
+
+            {drag && (
+              <div
+                className="pointer-events-none fixed z-50 flex flex-col gap-2 rounded-xl bg-white p-3 shadow-2xl ring-2 ring-orange"
+                style={{
+                  left: drag.x,
+                  top: drag.y,
+                  width: drag.width,
+                  transform: "scale(1.03) rotate(1deg)",
+                }}
+              >
+                <div>
+                  <p className="text-sm font-bold text-coffee">{drag.order.customer_name}</p>
+                  <p className="text-xs text-coffee-soft">{drag.order.window_label_snapshot}</p>
+                </div>
+                <ul className="flex flex-col gap-0.5">
+                  {drag.order.order_items.map((item, i) => (
+                    <li key={i} className="text-xs text-coffee-soft">
+                      <span className="font-bold text-coffee">{item.qty}×</span>{" "}
+                      {item.product_name_snapshot}
+                    </li>
+                  ))}
+                </ul>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )
       ) : groups.length === 0 ? (
         <div className="rounded-2xl bg-white p-6 text-center text-sm text-coffee-soft">

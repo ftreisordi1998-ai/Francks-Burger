@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/Badge";
 import { useDialog } from "@/lib/dialog-context";
 import { createClient } from "@/lib/supabase/client";
@@ -40,6 +40,7 @@ export function AdminOrdersScreen({
   const [fulfillmentFilter, setFulfillmentFilter] = useState<FulfillmentType | "all">("all");
   const [progressFilter, setProgressFilter] = useState<ProgressFilter>("all");
   const { confirmDialog, alertDialog } = useDialog();
+  const channelSuffix = useRef(Math.random().toString(36).slice(2)).current;
 
   useEffect(() => {
     const supabase = createClient();
@@ -64,7 +65,7 @@ export function AdminOrdersScreen({
       if (session) supabase.realtime.setAuth(session.access_token);
 
       channel = supabase
-        .channel("admin-orders")
+        .channel(`admin-orders-${channelSuffix}`)
         .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
           refetch();
         })

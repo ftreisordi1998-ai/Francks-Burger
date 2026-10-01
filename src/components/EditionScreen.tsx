@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Logo } from "./Logo";
 import { Badge } from "./Badge";
 import { ProductCard } from "./ProductCard";
@@ -34,6 +34,7 @@ export function EditionScreen({
   const [edition, setEditionData] = useState(initialEdition);
   const [products, setProducts] = useState(initialProducts);
   const [clockTick, setClockTick] = useState(0);
+  const channelSuffix = useRef(Math.random().toString(36).slice(2)).current;
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
   const [pushModal, setPushModal] = useState<"hidden" | "ask" | "ios-install">("hidden");
   const [pushBusy, setPushBusy] = useState(false);
@@ -87,7 +88,7 @@ export function EditionScreen({
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
-      .channel(`edition-${edition.id}`)
+      .channel(`edition-${edition.id}-${channelSuffix}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "products", filter: `edition_id=eq.${edition.id}` },
