@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/Badge";
+import { buildCustomerWhatsAppUrl } from "@/lib/contact";
 import { useDialog } from "@/lib/dialog-context";
 import { createClient } from "@/lib/supabase/client";
 import { ORDER_STATUS_FLOW, ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/status";
@@ -152,6 +153,16 @@ export function ProductionListScreen({
   function advanceOrder(order: ProductionOrder) {
     const next = ORDER_STATUS_FLOW[ORDER_STATUS_FLOW.indexOf(order.order_status) + 1];
     if (next) moveOrderTo(order, next);
+  }
+
+  function retreatOrder(order: ProductionOrder) {
+    const prev = ORDER_STATUS_FLOW[ORDER_STATUS_FLOW.indexOf(order.order_status) - 1];
+    if (prev) moveOrderTo(order, prev);
+  }
+
+  function buildOutForDeliveryMessage(order: ProductionOrder) {
+    const firstName = order.customer_name.trim().split(/\s+/)[0];
+    return `Oi, ${firstName}! Seu pedido Franck's Burger já saiu para entrega 🛵🍔 Chega até você dentro do horário ${order.window_label_snapshot}. Qualquer coisa, é só chamar por aqui!`;
   }
 
   function handleCardPointerDown(e: React.PointerEvent<HTMLDivElement>, order: ProductionOrder) {
@@ -364,8 +375,11 @@ export function ProductionListScreen({
                   </div>
                   <div className="flex min-h-[40px] flex-col gap-2">
                     {col.orders.map((order) => {
-                      const nextStatus = ORDER_STATUS_FLOW[ORDER_STATUS_FLOW.indexOf(order.order_status) + 1];
+                      const statusIdx = ORDER_STATUS_FLOW.indexOf(order.order_status);
+                      const nextStatus = ORDER_STATUS_FLOW[statusIdx + 1];
+                      const prevStatus = ORDER_STATUS_FLOW[statusIdx - 1];
                       const isDragging = drag?.order.id === order.id;
+                      const isMoving = movingId === order.id;
                       return (
                         <div
                           key={order.id}
@@ -389,16 +403,47 @@ export function ProductionListScreen({
                               </li>
                             ))}
                           </ul>
-                          {nextStatus && (
-                            <button
-                              onClick={() => advanceOrder(order)}
-                              disabled={movingId === order.id}
-                              className="min-h-9 rounded-lg bg-orange-soft px-2.5 py-1.5 text-xs font-bold text-orange-dark disabled:opacity-50"
+
+                          {order.order_status === "out_for_delivery" && (
+                            <a
+                              href={buildCustomerWhatsAppUrl(
+                                order.whatsapp,
+                                buildOutForDeliveryMessage(order)
+                              )}
+                              target="_blank"
+                              rel="noreferrer"
+                              onPointerDown={(e) => e.stopPropagation()}
+                              className="flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-success-bg px-2.5 py-1.5 text-xs font-bold text-success"
                             >
-                              {movingId === order.id
-                                ? "Movendo…"
-                                : `Mover para "${ORDER_STATUS_LABEL[nextStatus]}" →`}
-                            </button>
+                              <WhatsAppIcon />
+                              Avisar no WhatsApp
+                            </a>
+                          )}
+
+                          {(prevStatus || nextStatus) && (
+                            <div className="flex gap-1.5">
+                              {prevStatus && (
+                                <button
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={() => retreatOrder(order)}
+                                  disabled={isMoving}
+                                  title={`Voltar para "${ORDER_STATUS_LABEL[prevStatus]}"`}
+                                  className="min-h-9 shrink-0 rounded-lg bg-cream-soft px-2.5 py-1.5 text-xs font-bold text-coffee-soft disabled:opacity-50"
+                                >
+                                  ←
+                                </button>
+                              )}
+                              {nextStatus && (
+                                <button
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={() => advanceOrder(order)}
+                                  disabled={isMoving}
+                                  className="min-h-9 flex-1 rounded-lg bg-orange-soft px-2.5 py-1.5 text-xs font-bold text-orange-dark disabled:opacity-50"
+                                >
+                                  {isMoving ? "Movendo…" : `${ORDER_STATUS_LABEL[nextStatus]} →`}
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
                       );
@@ -509,5 +554,13 @@ export function ProductionListScreen({
         </div>
       )}
     </div>
+  );
+}
+
+function WhatsAppIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12.04 2c-5.5 0-9.96 4.46-9.96 9.96 0 1.76.46 3.45 1.33 4.95L2 22l5.24-1.37a9.9 9.9 0 0 0 4.8 1.22h.01c5.5 0 9.96-4.46 9.96-9.96S17.54 2 12.04 2Zm5.8 14.24c-.24.68-1.4 1.3-1.94 1.38-.5.08-1.12.11-1.8-.11-.41-.13-.95-.31-1.63-.6-2.87-1.24-4.74-4.13-4.88-4.32-.14-.19-1.17-1.56-1.17-2.98 0-1.42.74-2.11 1-2.4.26-.29.57-.36.76-.36h.55c.18 0 .42-.03.65.5.25.55.83 2 .9 2.14.07.14.12.31.02.5-.1.19-.15.31-.29.48-.15.17-.31.38-.44.51-.15.15-.3.31-.13.6.17.29.76 1.25 1.63 2.02 1.12 1 2.06 1.31 2.35 1.46.29.15.46.13.63-.06.17-.19.72-.84.91-1.13.19-.29.38-.24.63-.14.26.1 1.65.78 1.93.92.28.14.47.21.54.33.07.12.07.68-.17 1.36Z" />
+    </svg>
   );
 }
