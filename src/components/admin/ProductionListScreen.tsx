@@ -33,6 +33,7 @@ interface ProductionOrder {
   order_status: OrderStatus;
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
+  cancel_reason: string | null;
   created_at: string;
   order_items: ProductionItem[];
 }
@@ -244,6 +245,7 @@ export function ProductionListScreen({
     }
 
     for (const order of orders) {
+      if (order.order_status === "cancelled") continue;
       const key = order.window_id ?? `label:${order.window_label_snapshot}`;
       if (!byKey.has(key)) {
         byKey.set(key, {
@@ -296,6 +298,12 @@ export function ProductionListScreen({
         .filter((o) => o.order_status === status)
         .sort((a, b) => a.created_at.localeCompare(b.created_at)),
     }));
+  }, [orders]);
+
+  const cancelledOrders = useMemo(() => {
+    return orders
+      .filter((o) => o.order_status === "cancelled")
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
   }, [orders]);
 
   const grandTotal = groups.reduce((sum, g) => sum + g.totalQty, 0);
@@ -454,6 +462,44 @@ export function ProductionListScreen({
                   </div>
                 </div>
               ))}
+
+              {cancelledOrders.length > 0 && (
+                <div className="flex w-[260px] shrink-0 flex-col gap-2.5 rounded-2xl bg-coffee/5 p-3">
+                  <div className="flex items-center justify-between gap-2 px-0.5">
+                    <h2 className="text-sm font-extrabold text-coffee-soft">Cancelado</h2>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-coffee-soft">
+                      {cancelledOrders.length}
+                    </span>
+                  </div>
+                  <div className="flex min-h-[40px] flex-col gap-2">
+                    {cancelledOrders.map((order) => (
+                      <div
+                        key={order.id}
+                        className="flex flex-col gap-2 rounded-xl bg-white/70 p-3 opacity-70 shadow-sm"
+                      >
+                        <div>
+                          <p className="text-sm font-bold text-coffee-soft line-through">
+                            {order.customer_name}
+                          </p>
+                          <p className="text-xs text-coffee-soft">{order.window_label_snapshot}</p>
+                        </div>
+                        <ul className="flex flex-col gap-0.5">
+                          {order.order_items.map((item, i) => (
+                            <li key={i} className="text-xs text-coffee-soft">
+                              <span className="font-bold">{item.qty}×</span> {item.product_name_snapshot}
+                            </li>
+                          ))}
+                        </ul>
+                        {order.cancel_reason && (
+                          <p className="text-xs italic text-coffee-soft">
+                            &ldquo;{order.cancel_reason}&rdquo;
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {drag && (

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { OrderDetailScreen } from "@/components/admin/OrderDetailScreen";
-import type { AdminOrderRow } from "@/lib/types";
+import type { AdminOrderRow, Product } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +26,18 @@ export default async function AdminOrderDetailPage({
     .select("*")
     .eq("order_id", id);
 
+  const { data: products } = await supabase
+    .from("products")
+    .select("*")
+    .eq("edition_id", order.edition_id)
+    .eq("active", true)
+    .order("sort_order", { ascending: true });
+
   return (
-    <OrderDetailScreen order={order as unknown as AdminOrderRow} items={items ?? []} />
+    <OrderDetailScreen
+      order={order as unknown as AdminOrderRow}
+      items={items ?? []}
+      products={(products ?? []) as Product[]}
+    />
   );
 }

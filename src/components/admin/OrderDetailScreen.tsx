@@ -7,6 +7,7 @@ import { Badge } from "@/components/Badge";
 import { useDialog } from "@/lib/dialog-context";
 import { createClient } from "@/lib/supabase/client";
 import { formatCents, formatDateTime } from "@/lib/format";
+import { DEFAULT_DONENESS, DONENESS_OPTIONS } from "@/lib/doneness";
 import {
   ORDER_STATUS_FLOW,
   ORDER_STATUS_LABEL,
@@ -15,10 +16,11 @@ import {
   PAYMENT_STATUS_LABEL,
   PAYMENT_STATUS_TONE,
 } from "@/lib/status";
-import type { AdminOrderRow, OrderStatus } from "@/lib/types";
+import type { AdminOrderRow, OrderStatus, Product } from "@/lib/types";
 
 interface OrderItemRow {
   id: string;
+  product_id: string;
   product_name_snapshot: string;
   qty: number;
   unit_price_cents_snapshot: number;
@@ -27,18 +29,51 @@ interface OrderItemRow {
   customer_note: string | null;
 }
 
+interface DraftItem {
+  key: string;
+  product_id: string;
+  doneness: string;
+  note: string;
+  qty: number;
+}
+
+const ITEMS_ERROR_MESSAGES: Record<string, string> = {
+  ORDER_CANCELLED: "Este pedido está cancelado — não dá pra editar os itens.",
+  EMPTY_CART: "O pedido precisa ter pelo menos um item.",
+  INVALID_QTY: "Quantidade inválida em algum item.",
+  WINDOW_FULL: "Não há vaga suficiente na janela de horário para essa quantidade.",
+};
+
+function friendlyItemsError(message: string): string {
+  const key = message.split(":")[0];
+  if (key === "PRODUCT_INVALID") return "Um dos sabores escolhidos não está mais disponível.";
+  if (key === "OUT_OF_STOCK") {
+    const flavor = message.split(":")[1];
+    return `"${flavor}" não tem estoque suficiente para essa quantidade.`;
+  }
+  return ITEMS_ERROR_MESSAGES[key] ?? "Não foi possível salvar os itens. Tente novamente.";
+}
+
 export function OrderDetailScreen({
   order: initial,
-  items,
+  items: initialItems,
+  products,
 }: {
   order: AdminOrderRow;
   items: OrderItemRow[];
+  products: Product[];
 }) {
   const [order, setOrder] = useState(initial);
+  const [items, setItems] = useState(initialItems);
   const [busy, setBusy] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [showCancel, setShowCancel] = useState(false);
   const [notifyState, setNotifyState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [editingItems, setEditingItems] = useState(false);
+  const [draftItems, setDraftItems] = useState<DraftItem[]>([]);
+  const [savingItems, setSavingItems] = useState(false);
+  const [itemsError, setItemsError] = useState<string | null>(null);
+  const [markingRefunded, setMarkingRefunded] = useState(false);
   const router = useRouter();
   const { confirmDialog, alertDialog } = useDialog();
 
@@ -75,6 +110,109 @@ export function OrderDetailScreen({
       .single();
     if (data) setOrder(data as unknown as AdminOrderRow);
     setBusy(false);
+  }
+
+  async function markRefunded() {
+    const ok = await confirmDialog({
+      title: "Marcar como reembolsado?",
+      message: "Confirme isso só depois de já ter feito o estorno de verdade para o cliente.",
+      confirmLabel: "Sim, já estornei",
+    });
+    if (!ok) return;
+    setMarkingRefunded(true);
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("orders")
+      .update({ payment_status: "refunded" })
+      .eq("id", order.id)
+      .select("*, editions(title, prep_date)")
+      .single();
+    if (data) setOrder(data as unknown as AdminOrderRow);
+    setMarkingRefunded(false);
+  }
+
+  function startEditItems() {
+    setDraftItems(
+      items.map((item) => ({
+        key: item.id,
+        product_id: item.product_id,
+        doneness: item.doneness ?? DEFAULT_DONENESS,
+        note: item.customer_note ?? "",
+        qty: item.qty,
+      }))
+    );
+    setItemsError(null);
+    setEditingItems(true);
+  }
+
+  function cancelEditItems() {
+    setEditingItems(false);
+    setItemsError(null);
+  }
+
+  function updateDraftItem(key: string, patch: Partial<DraftItem>) {
+    setDraftItems((prev) => prev.map((d) => (d.key === key ? { ...d, ...patch } : d)));
+  }
+
+  function removeDraftItem(key: string) {
+    setDraftItems((prev) => prev.filter((d) => d.key !== key));
+  }
+
+  function addDraftItem() {
+    if (products.length === 0) return;
+    setDraftItems((prev) => [
+      ...prev,
+      {
+        key: `new-${Date.now()}-${Math.random()}`,
+        product_id: products[0].id,
+        doneness: DEFAULT_DONENESS,
+        note: "",
+        qty: 1,
+      },
+    ]);
+  }
+
+  async function saveItems() {
+    if (draftItems.length === 0) {
+      setItemsError("O pedido precisa ter pelo menos um item.");
+      return;
+    }
+    setSavingItems(true);
+    setItemsError(null);
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("admin_update_order_items", {
+      p_order_id: order.id,
+      p_items: draftItems.map((d) => ({
+        product_id: d.product_id,
+        qty: d.qty,
+        doneness: d.doneness,
+        note: d.note.trim(),
+      })),
+    });
+    setSavingItems(false);
+    if (error) {
+      setItemsError(friendlyItemsError(error.message));
+      return;
+    }
+    const result = data as { subtotal_cents: number; total_cents: number };
+    const productMap = new Map(products.map((p) => [p.id, p]));
+    setItems(
+      draftItems.map((d) => {
+        const product = productMap.get(d.product_id)!;
+        return {
+          id: d.key,
+          product_id: d.product_id,
+          product_name_snapshot: product.name,
+          qty: d.qty,
+          unit_price_cents_snapshot: product.price_cents,
+          line_total_cents: product.price_cents * d.qty,
+          doneness: d.doneness,
+          customer_note: d.note.trim() || null,
+        };
+      })
+    );
+    setOrder((o) => ({ ...o, subtotal_cents: result.subtotal_cents, total_cents: result.total_cents }));
+    setEditingItems(false);
   }
 
   async function advanceStatus(next: OrderStatus) {
@@ -202,9 +340,18 @@ export function OrderDetailScreen({
       )}
 
       {order.payment_status === "refund_pending" && (
-        <div className="mt-3 rounded-xl bg-danger-bg px-4 py-3 text-sm font-semibold text-danger">
-          Reembolso pendente — este pedido foi pago e depois cancelado. Confirme o
-          estorno manualmente e atualize o status.
+        <div className="mt-3 flex flex-col gap-2 rounded-xl bg-danger-bg px-4 py-3 text-sm font-semibold text-danger">
+          <p>
+            Reembolso pendente — este pedido foi pago e depois cancelado. Faça o estorno
+            manualmente (fora do sistema) e depois confirme aqui.
+          </p>
+          <button
+            onClick={markRefunded}
+            disabled={markingRefunded}
+            className="self-start rounded-lg bg-danger px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
+          >
+            {markingRefunded ? "Marcando…" : "Marcar como reembolsado"}
+          </button>
         </div>
       )}
 
@@ -233,45 +380,135 @@ export function OrderDetailScreen({
       </section>
 
       <section className="mt-4 rounded-2xl bg-white p-4">
-        <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">Itens</h2>
-        <div className="mt-2 flex flex-col gap-3">
-          {groupedItems.map((group) => (
-            <div key={group.name} className="flex flex-col gap-1.5">
-              <p className="text-sm font-extrabold text-coffee">
-                {group.name}
-                {group.lines.length > 1 && (
-                  <span className="ml-1.5 font-normal text-coffee-soft">
-                    · {group.totalQty} unidades
-                  </span>
-                )}
-              </p>
-              {group.lines.map((item) => (
-                <div
-                  key={item.id}
-                  className={`flex flex-col gap-0.5 text-sm ${
-                    group.lines.length > 1
-                      ? "rounded-lg border border-orange/20 bg-orange-soft/25 px-2.5 py-1.5"
-                      : ""
-                  }`}
-                >
-                  <div className="flex justify-between">
-                    <span className="font-bold text-coffee">
-                      {item.qty}× {item.doneness ?? "Ponto da casa"}
-                    </span>
-                    <span className="font-semibold text-coffee">
-                      {formatCents(item.line_total_cents)}
-                    </span>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">Itens</h2>
+          {!editingItems && !isCancelled && (
+            <button onClick={startEditItems} className="text-xs font-bold text-orange">
+              Editar itens
+            </button>
+          )}
+        </div>
+
+        {editingItems ? (
+          <div className="mt-2 flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
+              {draftItems.map((item) => (
+                <div key={item.key} className="flex flex-col gap-2 rounded-xl bg-cream-soft p-3">
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={item.product_id}
+                      onChange={(e) => updateDraftItem(item.key, { product_id: e.target.value })}
+                      className="min-h-11 flex-1 rounded-lg bg-white px-2.5 py-2 text-sm font-semibold"
+                      style={{ fontSize: 16 }}
+                    >
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} — {formatCents(p.price_cents)}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min={1}
+                      value={item.qty}
+                      onChange={(e) =>
+                        updateDraftItem(item.key, { qty: Math.max(1, Number(e.target.value)) })
+                      }
+                      className="min-h-11 w-16 rounded-lg bg-white px-2 py-2 text-center text-sm"
+                      style={{ fontSize: 16 }}
+                    />
+                    <button
+                      onClick={() => removeDraftItem(item.key)}
+                      aria-label="Remover item"
+                      className="min-h-11 shrink-0 rounded-lg bg-danger-bg px-3 text-sm font-bold text-danger"
+                    >
+                      ✕
+                    </button>
                   </div>
-                  {item.customer_note && (
-                    <span className="text-xs italic text-coffee-soft">
-                      &ldquo;{item.customer_note}&rdquo;
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={item.doneness}
+                      onChange={(e) => updateDraftItem(item.key, { doneness: e.target.value })}
+                      className="min-h-11 rounded-lg bg-white px-2.5 py-2 text-xs"
+                      style={{ fontSize: 16 }}
+                    >
+                      {DONENESS_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      value={item.note}
+                      onChange={(e) => updateDraftItem(item.key, { note: e.target.value })}
+                      placeholder="Observação (opcional)"
+                      className="min-h-11 flex-1 rounded-lg bg-white px-2.5 py-2 text-xs"
+                      style={{ fontSize: 16 }}
+                    />
+                  </div>
                 </div>
               ))}
+              {draftItems.length === 0 && (
+                <p className="text-sm text-coffee-soft">Nenhum item — adicione pelo menos um.</p>
+              )}
             </div>
-          ))}
-        </div>
+            <button
+              onClick={addDraftItem}
+              disabled={products.length === 0}
+              className="min-h-11 self-start rounded-lg bg-orange-soft px-3 text-sm font-bold text-orange-dark disabled:opacity-50"
+            >
+              + Adicionar item
+            </button>
+            {itemsError && <p className="text-xs font-semibold text-danger">{itemsError}</p>}
+            <div className="flex gap-2">
+              <ActionButton onClick={saveItems} disabled={savingItems}>
+                {savingItems ? "Salvando…" : "Salvar itens"}
+              </ActionButton>
+              <ActionButton onClick={cancelEditItems} disabled={savingItems} variant="ghost">
+                Cancelar
+              </ActionButton>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-2 flex flex-col gap-3">
+            {groupedItems.map((group) => (
+              <div key={group.name} className="flex flex-col gap-1.5">
+                <p className="text-sm font-extrabold text-coffee">
+                  {group.name}
+                  {group.lines.length > 1 && (
+                    <span className="ml-1.5 font-normal text-coffee-soft">
+                      · {group.totalQty} unidades
+                    </span>
+                  )}
+                </p>
+                {group.lines.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`flex flex-col gap-0.5 text-sm ${
+                      group.lines.length > 1
+                        ? "rounded-lg border border-orange/20 bg-orange-soft/25 px-2.5 py-1.5"
+                        : ""
+                    }`}
+                  >
+                    <div className="flex justify-between">
+                      <span className="font-bold text-coffee">
+                        {item.qty}× {item.doneness ?? "Ponto da casa"}
+                      </span>
+                      <span className="font-semibold text-coffee">
+                        {formatCents(item.line_total_cents)}
+                      </span>
+                    </div>
+                    {item.customer_note && (
+                      <span className="text-xs italic text-coffee-soft">
+                        &ldquo;{item.customer_note}&rdquo;
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
         <div className="mt-3 flex flex-col gap-1 border-t border-cream-soft pt-2 text-sm">
           <div className="flex justify-between text-coffee-soft">
             <span>Subtotal</span>
