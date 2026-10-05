@@ -373,17 +373,7 @@ export function EditionEditorScreen({
               className="input"
             />
           </Field>
-          <Field label="Prazo para encomendar">
-            <input
-              type="datetime-local"
-              value={toLocalInput(edition.order_deadline)}
-              onChange={(e) =>
-                setEdition({ ...edition, order_deadline: new Date(e.target.value).toISOString() })
-              }
-              className="input"
-            />
-          </Field>
-          <Field label="Abre automaticamente em (opcional)">
+          <Field label="Prazo para abrir as encomendas (opcional)">
             <input
               type="datetime-local"
               value={edition.opens_at ? toLocalInput(edition.opens_at) : ""}
@@ -399,6 +389,21 @@ export function EditionEditorScreen({
               Deixe em branco para abrir assim que a situação estiver &ldquo;Aberta&rdquo;. Com
               data marcada, as encomendas ficam bloqueadas até essa hora — sem precisar mexer em
               nada na hora certa.
+            </p>
+          </Field>
+          <Field label="Prazo para fechar as encomendas">
+            <input
+              type="datetime-local"
+              value={toLocalInput(edition.order_deadline)}
+              onChange={(e) =>
+                setEdition({ ...edition, order_deadline: new Date(e.target.value).toISOString() })
+              }
+              className="input"
+            />
+            <p className="mt-1 text-xs text-coffee-soft">
+              Passado esse horário, as encomendas fecham sozinhas — mesmo que ainda tenha
+              estoque. Só volta a abrir se você mudar algo aqui (esse prazo, a situação ou o
+              prazo de abertura).
             </p>
           </Field>
           <Field label="Minutos para expirar reserva não paga">
