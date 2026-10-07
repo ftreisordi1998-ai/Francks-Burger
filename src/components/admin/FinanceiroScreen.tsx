@@ -197,6 +197,11 @@ export function FinanceiroScreen({
     else await alertDialog({ title: "Não foi possível excluir", message: "Tente novamente.", tone: "danger" });
   }
 
+  const usedSuggestions = useMemo(
+    () => new Set(expenses.map((e) => e.description.trim().toLowerCase())),
+    [expenses]
+  );
+
   const summary = useMemo(() => {
     const manualIncomeTotal = incomes.reduce((sum, i) => sum + i.amount_cents, 0);
     const orderIncomeTotal = orderIncomes.reduce((sum, o) => sum + o.total_cents, 0);
@@ -431,15 +436,23 @@ export function FinanceiroScreen({
               <span className="text-[11px] font-bold uppercase tracking-wide text-coffee-soft/70">
                 {group.label}:
               </span>
-              {group.items.map((item) => (
-                <button
-                  key={item}
-                  onClick={() => setExpenseDesc(item)}
-                  className="rounded-full bg-cream-soft px-3 py-1.5 text-xs font-semibold text-coffee-soft hover:bg-orange-soft hover:text-orange-dark"
-                >
-                  {item}
-                </button>
-              ))}
+              {group.items.map((item) => {
+                const used = usedSuggestions.has(item.toLowerCase());
+                return (
+                  <button
+                    key={item}
+                    onClick={() => setExpenseDesc(item)}
+                    className={
+                      used
+                        ? "rounded-full bg-danger-bg/60 px-3 py-1.5 text-xs font-semibold text-danger/60"
+                        : "rounded-full bg-cream-soft px-3 py-1.5 text-xs font-semibold text-coffee-soft hover:bg-orange-soft hover:text-orange-dark"
+                    }
+                  >
+                    {used ? "✓ " : ""}
+                    {item}
+                  </button>
+                );
+              })}
             </div>
           ))}
         </div>
