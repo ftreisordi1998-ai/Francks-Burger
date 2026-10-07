@@ -34,11 +34,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/admin/edicoes" className="hover:text-orange">
               Edições
             </Link>
+            <Link href="/admin/financeiro" className="hover:text-orange">
+              Financeiro
+            </Link>
           </nav>
         </div>
         <SignOutButton />
       </header>
-      <nav className="flex gap-4 border-b border-coffee/10 bg-cream px-5 py-2 text-sm font-semibold text-coffee-soft sm:hidden">
+      <nav className="flex gap-4 overflow-x-auto border-b border-coffee/10 bg-cream px-5 py-2 text-sm font-semibold text-coffee-soft sm:hidden">
         <Link href="/admin/pedidos" className="hover:text-orange">
           Pedidos
         </Link>
@@ -47,6 +50,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </Link>
         <Link href="/admin/edicoes" className="hover:text-orange">
           Edições
+        </Link>
+        <Link href="/admin/financeiro" className="shrink-0 hover:text-orange">
+          Financeiro
         </Link>
       </nav>
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 [&:has(#production-full-width)]:max-w-[1800px]">

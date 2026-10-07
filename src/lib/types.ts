@@ -31,8 +31,39 @@ export interface Edition {
   free_delivery: boolean;
   notes_public: string | null;
   is_demo: boolean;
+  projected_revenue_cents: number | null;
   created_at: string;
   updated_at: string;
+}
+
+export type FinanceExpenseStatus = "previsto" | "pago";
+export type FinancePaymentMethod = "pix" | "dinheiro" | "cartao";
+
+export interface FinanceExpense {
+  id: string;
+  edition_id: string;
+  description: string;
+  amount_cents: number;
+  status: FinanceExpenseStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FinanceIncome {
+  id: string;
+  edition_id: string;
+  description: string;
+  amount_cents: number;
+  payment_method: FinancePaymentMethod;
+  created_at: string;
+}
+
+export interface OrderIncomeRow {
+  id: string;
+  customer_name: string;
+  total_cents: number;
+  payment_method: PaymentMethod;
+  created_at: string;
 }
 
 export interface Product {

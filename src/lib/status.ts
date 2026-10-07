@@ -1,9 +1,20 @@
-import type { OrderStatus, PaymentMethod, PaymentStatus } from "./types";
+import type { FinanceExpenseStatus, FinancePaymentMethod, OrderStatus, PaymentMethod, PaymentStatus } from "./types";
 
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   pix: "Pix",
   card: "Cartão na entrega",
   cash: "Dinheiro",
+};
+
+export const FINANCE_PAYMENT_METHOD_LABEL: Record<FinancePaymentMethod, string> = {
+  pix: "Pix",
+  dinheiro: "Dinheiro",
+  cartao: "Cartão",
+};
+
+export const FINANCE_EXPENSE_STATUS_LABEL: Record<FinanceExpenseStatus, string> = {
+  previsto: "Previsto",
+  pago: "Pago",
 };
 
 export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
