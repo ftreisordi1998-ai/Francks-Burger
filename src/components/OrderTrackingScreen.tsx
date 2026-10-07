@@ -75,9 +75,30 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
       mapboxgl.accessToken = MAPBOX_TOKEN;
       mapRef.current = new mapboxgl.Map({
         container: mapContainerRef.current,
-        style: "mapbox://styles/mapbox/streets-v12",
+        style: "mapbox://styles/mapbox/navigation-day-v1",
         center: lngLat,
-        zoom: 15,
+        zoom: 16.5,
+        pitch: 55,
+        bearing: deliveryPos.heading ?? 0,
+        antialias: true,
+      });
+      mapRef.current.on("load", () => {
+        const map = mapRef.current;
+        if (!map || map.getLayer("3d-buildings")) return;
+        map.addLayer({
+          id: "3d-buildings",
+          source: "composite",
+          "source-layer": "building",
+          filter: ["==", "extrude", "true"],
+          type: "fill-extrusion",
+          minzoom: 14,
+          paint: {
+            "fill-extrusion-color": "#d8d3c4",
+            "fill-extrusion-height": ["get", "height"],
+            "fill-extrusion-base": ["get", "min_height"],
+            "fill-extrusion-opacity": 0.75,
+          },
+        });
       });
       const el = document.createElement("div");
       el.style.cssText =
@@ -105,7 +126,11 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
       }
     }
     animFrameRef.current = requestAnimationFrame(step);
-    mapRef.current.easeTo({ center: to, duration: durationMs });
+    mapRef.current.easeTo({
+      center: to,
+      bearing: deliveryPos.heading ?? mapRef.current.getBearing(),
+      duration: durationMs,
+    });
   }, [deliveryPos, showLiveMap]);
 
   useEffect(() => {

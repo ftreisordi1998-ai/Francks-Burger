@@ -211,9 +211,29 @@ export function RoutePlannerScreen({
     mapboxgl.accessToken = MAPBOX_TOKEN;
     mapRef.current = new mapboxgl.Map({
       container: mapContainerRef.current,
-      style: "mapbox://styles/mapbox/streets-v12",
+      style: "mapbox://styles/mapbox/navigation-day-v1",
       center: [-50.79, -23.21],
-      zoom: 13,
+      zoom: 15,
+      pitch: 50,
+      antialias: true,
+    });
+    mapRef.current.on("load", () => {
+      const map = mapRef.current;
+      if (!map || map.getLayer("3d-buildings")) return;
+      map.addLayer({
+        id: "3d-buildings",
+        source: "composite",
+        "source-layer": "building",
+        filter: ["==", "extrude", "true"],
+        type: "fill-extrusion",
+        minzoom: 14,
+        paint: {
+          "fill-extrusion-color": "#d8d3c4",
+          "fill-extrusion-height": ["get", "height"],
+          "fill-extrusion-base": ["get", "min_height"],
+          "fill-extrusion-opacity": 0.75,
+        },
+      });
     });
     // O container só existe no DOM quando essa condição vira true — se o efeito
     // rodasse só uma vez (deps vazias), ele rodaria antes da seção aparecer e
@@ -278,7 +298,7 @@ export function RoutePlannerScreen({
     }
 
     if (!bounds.isEmpty()) {
-      map.fitBounds(bounds, { padding: 60, maxZoom: 16 });
+      map.fitBounds(bounds, { padding: 60, maxZoom: 16, pitch: 50 });
     }
   }, [routeResult, kitchen]);
 
