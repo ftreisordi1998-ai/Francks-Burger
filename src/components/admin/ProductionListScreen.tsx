@@ -84,6 +84,21 @@ export function ProductionListScreen({
     const supabase = createClient();
     let channel: ReturnType<typeof supabase.channel> | null = null;
 
+    // Patchear o payload do Realtime não dá pra lidar direito com pedido novo
+    // (o INSERT não traz order_items, que vem de um join) nem com mudança de
+    // edição (o filtro já capturaria a edição errada) — então, em qualquer
+    // mudança na tabela orders, só busca a lista inteira de novo.
+    async function refetch() {
+      const { data } = await supabase
+        .from("orders")
+        .select(
+          "id, customer_name, whatsapp, fulfillment_type, window_id, window_label_snapshot, order_status, payment_method, payment_status, cancel_reason, created_at, order_items(product_name_snapshot, doneness, customer_note, qty)"
+        )
+        .eq("edition_id", selectedEditionId)
+        .order("created_at", { ascending: true });
+      if (data) setOrders(data as unknown as ProductionOrder[]);
+    }
+
     async function start() {
       const {
         data: { session },
@@ -92,16 +107,8 @@ export function ProductionListScreen({
 
       channel = supabase
         .channel(`admin-production-${channelSuffix}`)
-        .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload) => {
-          if (payload.eventType === "DELETE") {
-            setOrders((prev) => prev.filter((o) => o.id !== (payload.old as { id: string }).id));
-            return;
-          }
-          const updated = payload.new as ProductionOrder;
-          setOrders((prev) => {
-            if (!prev.some((o) => o.id === updated.id)) return prev;
-            return prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o));
-          });
+        .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
+          refetch();
         })
         .subscribe();
     }
@@ -118,7 +125,7 @@ export function ProductionListScreen({
       authSubscription.unsubscribe();
       if (channel) supabase.removeChannel(channel);
     };
-  }, []);
+  }, [selectedEditionId, channelSuffix]);
 
   async function moveOrderTo(order: ProductionOrder, next: OrderStatus) {
     if (next === order.order_status) return;
