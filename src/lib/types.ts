@@ -141,6 +141,8 @@ export interface OrderTrackingView {
   payment_deadline_hours: number | null;
   payment_method: PaymentMethod;
   cash_change_for_cents: number | null;
+  edition_id: string;
+  window_id: string;
 }
 
 export interface AdminOrderRow {
@@ -218,6 +220,31 @@ export interface RoutePlanResult {
   totalDistanceMeters: number;
   totalDurationSeconds: number;
   failedOrders: { id: string; customerName: string; reason: GeocodeStatus }[];
+}
+
+export type DeliverySessionStatus = "pending" | "active" | "ended";
+
+export interface DeliverySession {
+  id: string;
+  edition_id: string;
+  window_id: string;
+  token: string;
+  status: DeliverySessionStatus;
+  lat: number | null;
+  lng: number | null;
+  heading: number | null;
+  started_at: string | null;
+  ended_at: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
+export interface ActiveDeliveryPosition {
+  active: boolean;
+  lat?: number;
+  lng?: number;
+  heading?: number | null;
+  updated_at?: string;
 }
 
 export interface EditionOption {

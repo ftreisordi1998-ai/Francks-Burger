@@ -5,7 +5,14 @@ import { useRouter } from "next/navigation";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { createClient } from "@/lib/supabase/client";
-import type { EditionOption, GeocodeStatus, KitchenLocation, RouteOrderRow, RoutePlanResult } from "@/lib/types";
+import type {
+  DeliverySession,
+  EditionOption,
+  GeocodeStatus,
+  KitchenLocation,
+  RouteOrderRow,
+  RoutePlanResult,
+} from "@/lib/types";
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
@@ -68,6 +75,107 @@ export function RoutePlannerScreen({
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const courierMarkerRef = useRef<mapboxgl.Marker | null>(null);
+
+  const [deliverySession, setDeliverySession] = useState<DeliverySession | null>(null);
+  const [creatingSession, setCreatingSession] = useState(false);
+  const channelSuffix = useRef(Math.random().toString(36).slice(2)).current;
+
+  useEffect(() => {
+    async function loadSession() {
+      if (!selectedWindowId || !selectedEditionId) {
+        setDeliverySession(null);
+        return;
+      }
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("delivery_sessions")
+        .select("*")
+        .eq("edition_id", selectedEditionId)
+        .eq("window_id", selectedWindowId)
+        .neq("status", "ended")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setDeliverySession((data as DeliverySession | null) ?? null);
+    }
+    loadSession();
+  }, [selectedEditionId, selectedWindowId]);
+
+  useEffect(() => {
+    if (!deliverySession) return;
+    const sessionId = deliverySession.id;
+    const supabase = createClient();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    async function start() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) supabase.realtime.setAuth(session.access_token);
+
+      channel = supabase
+        .channel(`admin-delivery-session-${channelSuffix}`)
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "delivery_sessions", filter: `id=eq.${sessionId}` },
+          (payload) => {
+            setDeliverySession(payload.new as DeliverySession);
+          }
+        )
+        .subscribe();
+    }
+    start();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [deliverySession?.id, channelSuffix]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !deliverySession?.lat || !deliverySession?.lng) {
+      courierMarkerRef.current?.remove();
+      courierMarkerRef.current = null;
+      return;
+    }
+    const lngLat: [number, number] = [deliverySession.lng, deliverySession.lat];
+    if (!courierMarkerRef.current) {
+      const el = document.createElement("div");
+      el.style.cssText =
+        "width:32px;height:32px;border-radius:50%;background:#2563eb;display:flex;align-items:center;justify-content:center;font-size:17px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.35);transition:transform 1s linear;";
+      el.textContent = "🛵";
+      courierMarkerRef.current = new mapboxgl.Marker({ element: el }).setLngLat(lngLat).addTo(map);
+    } else {
+      courierMarkerRef.current.setLngLat(lngLat);
+    }
+  }, [deliverySession]);
+
+  async function createTrackingLink() {
+    setCreatingSession(true);
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("admin_create_delivery_session", {
+      p_edition_id: selectedEditionId,
+      p_window_id: selectedWindowId,
+    });
+    setCreatingSession(false);
+    if (!error && data) {
+      setDeliverySession({
+        id: data.id,
+        edition_id: selectedEditionId,
+        window_id: selectedWindowId,
+        token: data.token,
+        status: "pending",
+        lat: null,
+        lng: null,
+        heading: null,
+        started_at: null,
+        ended_at: null,
+        updated_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      });
+    }
+  }
 
   useEffect(() => {
     async function fetchOrders() {
@@ -467,6 +575,66 @@ export function RoutePlannerScreen({
 
       {routeResult && routeResult.stops.length > 0 && (
         <>
+          <section className="flex flex-col gap-2 rounded-2xl bg-white p-4">
+            <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">
+              Rastreamento ao vivo do motoboy
+            </h2>
+            {!deliverySession ? (
+              <button
+                onClick={createTrackingLink}
+                disabled={creatingSession}
+                className="min-h-11 self-start rounded-xl bg-orange px-4 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {creatingSession ? "Criando…" : "Criar link para o motoboy"}
+              </button>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                      deliverySession.status === "active"
+                        ? "bg-success-bg text-success"
+                        : deliverySession.status === "ended"
+                          ? "bg-cream-soft text-coffee-soft"
+                          : "bg-warning-bg text-warning"
+                    }`}
+                  >
+                    {deliverySession.status === "active"
+                      ? "🛵 Em entrega"
+                      : deliverySession.status === "ended"
+                        ? "Encerrado"
+                        : "Aguardando o motoboy iniciar"}
+                  </span>
+                  {deliverySession.updated_at && deliverySession.status === "active" && (
+                    <span className="text-xs text-coffee-soft">
+                      Atualizado {new Date(deliverySession.updated_at).toLocaleTimeString("pt-BR")}
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(
+                      `Oi! Segue o link pra iniciar o rastreamento da entrega: https://francksburger.com.br/entrega/${deliverySession.token}`
+                    )}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="min-h-10 rounded-lg bg-success-bg px-3.5 py-2 text-xs font-bold text-success"
+                  >
+                    Enviar no WhatsApp
+                  </a>
+                  <button
+                    onClick={() =>
+                      navigator.clipboard.writeText(`https://francksburger.com.br/entrega/${deliverySession.token}`)
+                    }
+                    className="min-h-10 rounded-lg bg-cream-soft px-3.5 py-2 text-xs font-bold text-coffee-soft"
+                  >
+                    Copiar link
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
           <section className="rounded-2xl bg-white p-2">
             <div ref={mapContainerRef} className="h-[360px] w-full rounded-xl" />
           </section>

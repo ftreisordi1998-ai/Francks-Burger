@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 import { Logo } from "./Logo";
 import { Badge } from "./Badge";
 import { createClient } from "@/lib/supabase/client";
@@ -21,16 +23,96 @@ import {
   PAYMENT_STATUS_LABEL,
   PAYMENT_STATUS_TONE,
 } from "@/lib/status";
-import type { OrderTrackingView } from "@/lib/types";
+import type { ActiveDeliveryPosition, OrderTrackingView } from "@/lib/types";
 
 type PushCardState = "hidden" | "offer" | "subscribed" | "denied" | "error";
+
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
 export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingView }) {
   const [order, setOrder] = useState(initial);
   const [pushState, setPushState] = useState<PushCardState>("hidden");
   const [pushBusy, setPushBusy] = useState(false);
+  const [deliveryPos, setDeliveryPos] = useState<ActiveDeliveryPosition | null>(null);
   const router = useRouter();
   useSwipeBack(() => router.push("/"));
+
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markerRef = useRef<mapboxgl.Marker | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const prevLngLatRef = useRef<[number, number] | null>(null);
+
+  const showLiveMap =
+    order.fulfillment_type === "delivery" && order.order_status === "out_for_delivery";
+
+  useEffect(() => {
+    if (!showLiveMap || !MAPBOX_TOKEN) return;
+    let cancelled = false;
+    const supabase = createClient();
+
+    async function pollPosition() {
+      const { data } = await supabase.rpc("get_active_delivery_position", {
+        p_edition_id: order.edition_id,
+        p_window_id: order.window_id,
+      });
+      if (!cancelled && data) setDeliveryPos(data as ActiveDeliveryPosition);
+    }
+
+    pollPosition();
+    const interval = setInterval(pollPosition, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [showLiveMap, order.edition_id, order.window_id]);
+
+  useEffect(() => {
+    if (!showLiveMap || !MAPBOX_TOKEN || !deliveryPos?.active || !mapContainerRef.current) return;
+    const lngLat: [number, number] = [deliveryPos.lng!, deliveryPos.lat!];
+
+    if (!mapRef.current) {
+      mapboxgl.accessToken = MAPBOX_TOKEN;
+      mapRef.current = new mapboxgl.Map({
+        container: mapContainerRef.current,
+        style: "mapbox://styles/mapbox/streets-v12",
+        center: lngLat,
+        zoom: 15,
+      });
+      const el = document.createElement("div");
+      el.style.cssText =
+        "width:34px;height:34px;border-radius:50%;background:#e8540f;display:flex;align-items:center;justify-content:center;font-size:18px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.35);transition:transform 1s linear;";
+      el.textContent = "🛵";
+      markerRef.current = new mapboxgl.Marker({ element: el }).setLngLat(lngLat).addTo(mapRef.current);
+      prevLngLatRef.current = lngLat;
+      return;
+    }
+
+    const from = prevLngLatRef.current ?? lngLat;
+    const to = lngLat;
+    prevLngLatRef.current = to;
+    const start = performance.now();
+    const durationMs = 4500;
+
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    function step(now: number) {
+      const t = Math.min(1, (now - start) / durationMs);
+      const lng = from[0] + (to[0] - from[0]) * t;
+      const lat = from[1] + (to[1] - from[1]) * t;
+      markerRef.current?.setLngLat([lng, lat]);
+      if (t < 1) {
+        animFrameRef.current = requestAnimationFrame(step);
+      }
+    }
+    animFrameRef.current = requestAnimationFrame(step);
+    mapRef.current.easeTo({ center: to, duration: durationMs });
+  }, [deliveryPos, showLiveMap]);
+
+  useEffect(() => {
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isPushSupported()) return;
@@ -115,6 +197,21 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
           {PAYMENT_STATUS_LABEL[order.payment_status]}
         </Badge>
       </div>
+
+      {showLiveMap && (
+        <section className="mt-4 overflow-hidden rounded-2xl bg-white">
+          {deliveryPos?.active ? (
+            <div ref={mapContainerRef} className="h-[220px] w-full" />
+          ) : (
+            <div className="flex h-[140px] flex-col items-center justify-center gap-1 px-4 text-center">
+              <span className="text-2xl">🛵</span>
+              <p className="text-sm font-semibold text-coffee-soft">
+                Assim que o entregador sair, você vê o trajeto dele aqui ao vivo.
+              </p>
+            </div>
+          )}
+        </section>
+      )}
 
       {pushState === "offer" && (
         <section className="mt-4 flex flex-col gap-2 rounded-2xl bg-orange-soft px-4 py-3.5">
