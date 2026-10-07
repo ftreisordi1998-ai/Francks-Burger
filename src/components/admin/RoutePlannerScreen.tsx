@@ -204,6 +204,8 @@ export function RoutePlannerScreen({
     fetchOrders();
   }, [selectedWindowId]);
 
+  const showMapSection = Boolean(deliverySession) || Boolean(routeResult && routeResult.stops.length > 0);
+
   useEffect(() => {
     if (!MAPBOX_TOKEN || !mapContainerRef.current || mapRef.current) return;
     mapboxgl.accessToken = MAPBOX_TOKEN;
@@ -213,7 +215,10 @@ export function RoutePlannerScreen({
       center: [-50.79, -23.21],
       zoom: 13,
     });
-  }, []);
+    // O container só existe no DOM quando essa condição vira true — se o efeito
+    // rodasse só uma vez (deps vazias), ele rodaria antes da seção aparecer e
+    // nunca criaria o mapa.
+  }, [showMapSection]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -635,7 +640,7 @@ export function RoutePlannerScreen({
         </section>
       )}
 
-      {(deliverySession || (routeResult && routeResult.stops.length > 0)) && (
+      {showMapSection && (
         <section className="rounded-2xl bg-white p-2">
           <div ref={mapContainerRef} className="h-[360px] w-full rounded-xl" />
           {deliverySession && !routeResult && (
