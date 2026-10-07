@@ -66,6 +66,7 @@ export function FinanceiroScreen({
   incomes: initialIncomes,
   expenses: initialExpenses,
   orderIncomes,
+  openAmountCents,
 }: {
   editions: EditionOption[];
   selectedEditionId: string;
@@ -74,6 +75,7 @@ export function FinanceiroScreen({
   incomes: FinanceIncome[];
   expenses: FinanceExpense[];
   orderIncomes: OrderIncomeRow[];
+  openAmountCents: number;
 }) {
   const router = useRouter();
   const { confirmDialog, alertDialog } = useDialog();
@@ -296,6 +298,12 @@ export function FinanceiroScreen({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <SummaryCard label="Faturamento previsto" value={formatCents(projected)} />
         <SummaryCard label="Total recebido" value={formatCents(summary.totalReceived)} tone="success" />
+        <SummaryCard
+          label="Em aberto (a receber)"
+          value={formatCents(openAmountCents)}
+          sub="Pedidos feitos, ainda não pagos"
+          tone={openAmountCents > 0 ? "danger" : "neutral"}
+        />
         <SummaryCard
           label="Total de despesas"
           value={formatCents(summary.expensesTotal)}

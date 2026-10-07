@@ -30,43 +30,57 @@ export default async function AdminFinanceiroPage({
         incomes={[]}
         expenses={[]}
         orderIncomes={[]}
+        openAmountCents={0}
       />
     );
   }
 
-  const [{ data: edition }, { data: products }, { data: incomes }, { data: expenses }, { data: paidOrders }] =
-    await Promise.all([
-      supabase
-        .from("editions")
-        .select("projected_revenue_cents")
-        .eq("id", editionId)
-        .maybeSingle(),
-      supabase
-        .from("products")
-        .select("stock_qty, price_cents")
-        .eq("edition_id", editionId),
-      supabase
-        .from("finance_incomes")
-        .select("*")
-        .eq("edition_id", editionId)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("finance_expenses")
-        .select("*")
-        .eq("edition_id", editionId)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("orders")
-        .select("id, customer_name, total_cents, payment_method, created_at")
-        .eq("edition_id", editionId)
-        .eq("payment_status", "paid")
-        .order("created_at", { ascending: false }),
-    ]);
+  const [
+    { data: edition },
+    { data: products },
+    { data: incomes },
+    { data: expenses },
+    { data: paidOrders },
+    { data: openOrders },
+  ] = await Promise.all([
+    supabase
+      .from("editions")
+      .select("projected_revenue_cents")
+      .eq("id", editionId)
+      .maybeSingle(),
+    supabase
+      .from("products")
+      .select("stock_qty, price_cents")
+      .eq("edition_id", editionId),
+    supabase
+      .from("finance_incomes")
+      .select("*")
+      .eq("edition_id", editionId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("finance_expenses")
+      .select("*")
+      .eq("edition_id", editionId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("orders")
+      .select("id, customer_name, total_cents, payment_method, created_at")
+      .eq("edition_id", editionId)
+      .eq("payment_status", "paid")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("orders")
+      .select("total_cents")
+      .eq("edition_id", editionId)
+      .eq("payment_status", "pending")
+      .neq("order_status", "cancelled"),
+  ]);
 
   const suggestedProjectedCents = (products ?? []).reduce(
     (sum, p) => sum + p.stock_qty * p.price_cents,
     0
   );
+  const openAmountCents = (openOrders ?? []).reduce((sum, o) => sum + o.total_cents, 0);
 
   return (
     <FinanceiroScreen
@@ -77,6 +91,7 @@ export default async function AdminFinanceiroPage({
       incomes={(incomes ?? []) as FinanceIncome[]}
       expenses={(expenses ?? []) as FinanceExpense[]}
       orderIncomes={(paidOrders ?? []) as OrderIncomeRow[]}
+      openAmountCents={openAmountCents}
     />
   );
 }
