@@ -16,6 +16,7 @@ export function ProductCard({
   onOpen: () => void;
 }) {
   const soldOut = product.available_qty <= 0;
+  const lowStock = product.available_qty > 0 && product.available_qty <= 5;
 
   return (
     <button
@@ -62,9 +63,9 @@ export function ProductCard({
           {product.description}
         </p>
         <div className="mt-1.5 flex items-center justify-between gap-2">
-          {!soldOut && !disabled ? (
-            <span className="text-xs font-medium text-coffee-soft/80">
-              {product.available_qty} disponíveis
+          {!soldOut && !disabled && lowStock ? (
+            <span className="text-xs font-bold text-danger">
+              Só {product.available_qty} restantes
             </span>
           ) : (
             <span />
