@@ -635,12 +635,21 @@ export function RoutePlannerScreen({
         </section>
       )}
 
+      {(deliverySession || (routeResult && routeResult.stops.length > 0)) && (
+        <section className="rounded-2xl bg-white p-2">
+          <div ref={mapContainerRef} className="h-[360px] w-full rounded-xl" />
+          {deliverySession && !routeResult && (
+            <p className="px-2 pb-1 pt-2 text-xs text-coffee-soft">
+              {deliverySession.status === "active"
+                ? "🛵 Mostrando a posição do motoboy ao vivo."
+                : "Mapa pronto — assim que o motoboy iniciar a entrega pelo link, a posição aparece aqui."}
+            </p>
+          )}
+        </section>
+      )}
+
       {routeResult && routeResult.stops.length > 0 && (
         <>
-          <section className="rounded-2xl bg-white p-2">
-            <div ref={mapContainerRef} className="h-[360px] w-full rounded-xl" />
-          </section>
-
           <section className="flex flex-col gap-3 rounded-2xl bg-white p-4">
             <div className="flex flex-wrap gap-4 text-sm font-bold text-coffee">
               <span>Distância total: {formatDistance(routeResult.totalDistanceMeters)}</span>
