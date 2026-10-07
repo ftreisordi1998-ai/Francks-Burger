@@ -12,6 +12,7 @@ import { useDialog } from "@/lib/dialog-context";
 import { createClient } from "@/lib/supabase/client";
 import { ensurePushSubscription, isAndroid, isIOS, isPushSupported, isStandalone } from "@/lib/push";
 import { formatDate, formatDateTime, formatWeekday } from "@/lib/format";
+import { LINKS_PAGE_URLS } from "@/lib/links-config";
 import {
   canOrder,
   getEditionSituation,
@@ -308,10 +309,35 @@ export function EditionScreen({
         ))}
       </section>
 
-      {!orderingEnabled && (
-        <div className="mx-5 mt-5 rounded-2xl bg-white px-4 py-3.5 text-sm text-coffee-soft lg:mx-8">
-          {situationMessages[situation] ?? "Não é possível fazer pedidos agora."}
+      {!orderingEnabled && (situation === "closed_by_admin" || situation === "deadline_passed") ? (
+        <div className="mx-5 mt-5 flex flex-col items-center gap-3 rounded-2xl bg-white px-6 py-7 text-center lg:mx-8">
+          <span className="text-3xl">🎉</span>
+          <h2 className="text-lg font-extrabold leading-tight text-coffee">
+            Essa edição foi um sucesso — os pedidos encerraram!
+          </h2>
+          <p className="text-sm leading-relaxed text-coffee-soft">
+            Muito obrigado a todos que encomendaram! Agora é só aguardar a próxima edição.
+          </p>
+          <p className="text-sm leading-relaxed text-coffee-soft">
+            Enquanto isso, entra no nosso grupo do WhatsApp: é lá que eu posto a produção dos
+            burgers, o pessoal manda foto do pedido e dá seu feedback de verdade — e você fica
+            sabendo na hora assim que a próxima edição abrir.
+          </p>
+          <a
+            href={LINKS_PAGE_URLS.whatsappGroup}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-success px-5 text-sm font-bold text-white"
+          >
+            Entrar no grupo do WhatsApp
+          </a>
         </div>
+      ) : (
+        !orderingEnabled && (
+          <div className="mx-5 mt-5 rounded-2xl bg-white px-4 py-3.5 text-sm text-coffee-soft lg:mx-8">
+            {situationMessages[situation] ?? "Não é possível fazer pedidos agora."}
+          </div>
+        )
       )}
 
       {edition.is_demo && (
