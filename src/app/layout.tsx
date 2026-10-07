@@ -46,6 +46,9 @@ export const metadata: Metadata = {
   title,
   description,
   manifest: "/manifest.json",
+  verification: {
+    google: "50wFeuMG0VQcYfoahu4kLPluIaO-LvltCAFQ8Ozh8o4",
+  },
   icons: {
     icon: "/favicon-32.png",
     apple: "/icons/apple-touch-icon.png",
