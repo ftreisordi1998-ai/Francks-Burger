@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart-context";
 import { useDialog } from "@/lib/dialog-context";
@@ -9,6 +9,7 @@ import { useSwipeBack } from "@/lib/useSwipeBack";
 import { createClient } from "@/lib/supabase/client";
 import { silentlyLinkExistingSubscription } from "@/lib/push";
 import { formatCents, formatDate, formatWeekday } from "@/lib/format";
+import { fbTrack } from "@/lib/fbpixel";
 import { QtyStepper } from "./QtyStepper";
 import type {
   DeliveryWindow,
@@ -86,6 +87,16 @@ export function CheckoutScreen({
     fulfillment === "delivery" && !edition.free_delivery ? neighborhood?.delivery_fee_cents ?? 0 : 0;
   const totalCents = subtotalCents + deliveryFeeCents;
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (items.length === 0) return;
+    fbTrack("InitiateCheckout", {
+      value: subtotalCents / 100,
+      currency: "BRL",
+      num_items: items.reduce((sum, i) => sum + i.qty, 0),
+    });
+  }, []);
+
   const productMap = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
   const qtyByProduct = useMemo(() => {
     const map = new Map<string, number>();
@@ -154,6 +165,12 @@ export function CheckoutScreen({
     }
 
     const result = data as { public_token: string };
+    fbTrack("Purchase", {
+      value: totalCents / 100,
+      currency: "BRL",
+      content_type: "product",
+      num_items: items.reduce((sum, i) => sum + i.qty, 0),
+    });
     clear();
     silentlyLinkExistingSubscription(result.public_token);
     router.push(`/pedido/${result.public_token}`);

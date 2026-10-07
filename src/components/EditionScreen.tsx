@@ -12,6 +12,7 @@ import { useDialog } from "@/lib/dialog-context";
 import { createClient } from "@/lib/supabase/client";
 import { ensurePushSubscription, isAndroid, isIOS, isPushSupported, isStandalone } from "@/lib/push";
 import { formatDate, formatDateTime, formatWeekday } from "@/lib/format";
+import { fbTrack } from "@/lib/fbpixel";
 import {
   canOrder,
   getEditionSituation,
@@ -141,6 +142,13 @@ export function EditionScreen({
   async function handleOpenProduct(product: Product) {
     if (orderingEnabled) {
       setActiveProduct(product);
+      fbTrack("ViewContent", {
+        content_name: product.name,
+        content_ids: [product.id],
+        content_type: "product",
+        value: product.price_cents / 100,
+        currency: "BRL",
+      });
       return;
     }
     await alertDialog({
