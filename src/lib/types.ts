@@ -170,6 +170,56 @@ export interface AdminOrderRow {
   editions: { title: string; prep_date: string } | null;
 }
 
+export type GeocodeStatus = "ok" | "ambiguous" | "failed" | "manual";
+
+export interface RouteOrderRow {
+  id: string;
+  customer_name: string;
+  whatsapp: string;
+  address_street: string | null;
+  address_number: string | null;
+  address_complement: string | null;
+  address_reference: string | null;
+  neighborhood_name_snapshot: string | null;
+  address_lat: number | null;
+  address_lng: number | null;
+  address_geocode_status: GeocodeStatus | null;
+  order_items: { product_name_snapshot: string; qty: number }[];
+}
+
+export interface KitchenLocation {
+  id: "default";
+  address_street: string | null;
+  address_number: string | null;
+  neighborhood: string | null;
+  lat: number | null;
+  lng: number | null;
+  confirmed_at: string | null;
+}
+
+export interface GeocodeCandidate {
+  lat: number;
+  lng: number;
+  placeName: string;
+  relevance: number;
+}
+
+export interface RouteStop {
+  stopIndex: number;
+  lat: number;
+  lng: number;
+  addressLabel: string;
+  orders: { id: string; customerName: string; items: string }[];
+}
+
+export interface RoutePlanResult {
+  stops: RouteStop[];
+  geometry: { type: "LineString"; coordinates: [number, number][] } | null;
+  totalDistanceMeters: number;
+  totalDurationSeconds: number;
+  failedOrders: { id: string; customerName: string; reason: GeocodeStatus }[];
+}
+
 export interface EditionOption {
   id: string;
   title: string;
