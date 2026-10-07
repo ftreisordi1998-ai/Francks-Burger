@@ -34,6 +34,7 @@ export function AdminOrdersScreen({
   editions: EditionOption[];
 }) {
   const [orders, setOrders] = useState(initialOrders);
+  const [search, setSearch] = useState("");
   const [editionFilter, setEditionFilter] = useState<string>("all");
   const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | "all">("all");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
@@ -86,19 +87,24 @@ export function AdminOrdersScreen({
     };
   }, []);
 
-  const filtered = useMemo(
-    () =>
-      orders.filter((o) => {
-        if (editionFilter !== "all" && o.edition_id !== editionFilter) return false;
-        if (paymentFilter !== "all" && o.payment_status !== paymentFilter) return false;
-        if (statusFilter !== "all" && o.order_status !== statusFilter) return false;
-        if (fulfillmentFilter !== "all" && o.fulfillment_type !== fulfillmentFilter) return false;
-        if (progressFilter === "open" && !OPEN_ORDER_STATUSES.includes(o.order_status)) return false;
-        if (progressFilter === "closed" && !CLOSED_ORDER_STATUSES.includes(o.order_status)) return false;
-        return true;
-      }),
-    [orders, editionFilter, paymentFilter, statusFilter, fulfillmentFilter, progressFilter]
-  );
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return orders.filter((o) => {
+      if (editionFilter !== "all" && o.edition_id !== editionFilter) return false;
+      if (paymentFilter !== "all" && o.payment_status !== paymentFilter) return false;
+      if (statusFilter !== "all" && o.order_status !== statusFilter) return false;
+      if (fulfillmentFilter !== "all" && o.fulfillment_type !== fulfillmentFilter) return false;
+      if (progressFilter === "open" && !OPEN_ORDER_STATUSES.includes(o.order_status)) return false;
+      if (progressFilter === "closed" && !CLOSED_ORDER_STATUSES.includes(o.order_status)) return false;
+      if (term) {
+        const digits = term.replace(/\D/g, "");
+        const nameMatches = o.customer_name.toLowerCase().includes(term);
+        const phoneMatches = digits.length > 0 && o.whatsapp.replace(/\D/g, "").includes(digits);
+        if (!nameMatches && !phoneMatches) return false;
+      }
+      return true;
+    });
+  }, [orders, search, editionFilter, paymentFilter, statusFilter, fulfillmentFilter, progressFilter]);
 
   const openCount = orders.filter((o) => OPEN_ORDER_STATUSES.includes(o.order_status)).length;
   const closedCount = orders.filter((o) => CLOSED_ORDER_STATUSES.includes(o.order_status)).length;
@@ -145,7 +151,17 @@ export function AdminOrdersScreen({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por nome ou WhatsApp"
+          className="min-h-11 w-full rounded-xl border border-coffee/10 bg-white px-3.5 py-2.5 text-sm font-medium text-coffee sm:max-w-xs"
+          style={{ fontSize: 16 }}
+        />
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
         <Select value={editionFilter} onChange={setEditionFilter}>
           <option value="all">Todas as edições</option>
           {editions.map((e) => (

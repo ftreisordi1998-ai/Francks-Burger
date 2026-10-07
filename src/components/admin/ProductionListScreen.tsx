@@ -166,6 +166,11 @@ export function ProductionListScreen({
     return `Oi, ${firstName}! Seu pedido Franck's Burger já saiu para entrega 🛵🍔 Chega até você dentro do horário ${order.window_label_snapshot}. Qualquer coisa, é só chamar por aqui!`;
   }
 
+  function buildConfirmedMessage(order: ProductionOrder) {
+    const firstName = order.customer_name.trim().split(/\s+/)[0];
+    return `Oi, ${firstName}! Seu pedido Franck's Burger foi confirmado ✅ Vai chegar até você no horário ${order.window_label_snapshot}. Qualquer coisa, é só chamar por aqui!`;
+  }
+
   function handleCardPointerDown(e: React.PointerEvent<HTMLDivElement>, order: ProductionOrder) {
     if (e.button !== 0 && e.pointerType === "mouse") return;
     if ((e.target as HTMLElement).closest("button")) return;
@@ -411,6 +416,22 @@ export function ProductionListScreen({
                               </li>
                             ))}
                           </ul>
+
+                          {order.order_status === "confirmed" && (
+                            <a
+                              href={buildCustomerWhatsAppUrl(
+                                order.whatsapp,
+                                buildConfirmedMessage(order)
+                              )}
+                              target="_blank"
+                              rel="noreferrer"
+                              onPointerDown={(e) => e.stopPropagation()}
+                              className="flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-success-bg px-2.5 py-1.5 text-xs font-bold text-success"
+                            >
+                              <WhatsAppIcon />
+                              Confirmar no WhatsApp
+                            </a>
+                          )}
 
                           {order.order_status === "out_for_delivery" && (
                             <a

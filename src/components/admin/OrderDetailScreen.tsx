@@ -6,7 +6,8 @@ import { useMemo, useState } from "react";
 import { Badge } from "@/components/Badge";
 import { useDialog } from "@/lib/dialog-context";
 import { createClient } from "@/lib/supabase/client";
-import { formatCents, formatDateTime } from "@/lib/format";
+import { buildCustomerWhatsAppUrl } from "@/lib/contact";
+import { formatCents, formatDate, formatDateTime } from "@/lib/format";
 import { DEFAULT_DONENESS, DONENESS_OPTIONS } from "@/lib/doneness";
 import {
   ORDER_STATUS_FLOW,
@@ -79,6 +80,13 @@ export function OrderDetailScreen({
 
   const whatsappDigits = order.whatsapp.replace(/\D/g, "");
   const whatsappUrl = `https://wa.me/55${whatsappDigits}`;
+
+  function buildConfirmationMessage() {
+    const firstName = order.customer_name.trim().split(/\s+/)[0];
+    const prepDate = order.editions?.prep_date;
+    const dateText = prepDate ? ` dia ${formatDate(`${prepDate}T12:00:00`)}` : "";
+    return `Oi, ${firstName}! Seu pedido Franck's Burger foi confirmado ✅ Vai chegar até você${dateText} no horário ${order.window_label_snapshot}. Qualquer coisa, é só chamar por aqui!`;
+  }
 
   const groupedItems = useMemo(() => {
     const order_: string[] = [];
@@ -550,6 +558,16 @@ export function OrderDetailScreen({
                   ? "Reenviar notificação"
                   : "Notificar cliente"}
             </ActionButton>
+            {order.order_status !== "awaiting_confirmation" && (
+              <a
+                href={buildCustomerWhatsAppUrl(order.whatsapp, buildConfirmationMessage())}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-success-bg px-4 py-2.5 text-sm font-bold text-success"
+              >
+                Confirmar no WhatsApp
+              </a>
+            )}
             <ActionButton onClick={() => setShowCancel(true)} disabled={busy} variant="danger">
               Cancelar pedido
             </ActionButton>
