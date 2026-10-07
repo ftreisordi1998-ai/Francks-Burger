@@ -521,6 +521,68 @@ export function RoutePlannerScreen({
         )}
       </section>
 
+      {selectedWindowId && (
+        <section className="flex flex-col gap-2 rounded-2xl bg-white p-4">
+          <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">
+            Rastreamento ao vivo do motoboy
+          </h2>
+          {!deliverySession ? (
+            <button
+              onClick={createTrackingLink}
+              disabled={creatingSession}
+              className="min-h-11 self-start rounded-xl bg-orange px-4 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {creatingSession ? "Criando…" : "Criar link para o motoboy"}
+            </button>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                    deliverySession.status === "active"
+                      ? "bg-success-bg text-success"
+                      : deliverySession.status === "ended"
+                        ? "bg-cream-soft text-coffee-soft"
+                        : "bg-warning-bg text-warning"
+                  }`}
+                >
+                  {deliverySession.status === "active"
+                    ? "🛵 Em entrega"
+                    : deliverySession.status === "ended"
+                      ? "Encerrado"
+                      : "Aguardando o motoboy iniciar"}
+                </span>
+                {deliverySession.updated_at && deliverySession.status === "active" && (
+                  <span className="text-xs text-coffee-soft">
+                    Atualizado {new Date(deliverySession.updated_at).toLocaleTimeString("pt-BR")}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(
+                    `Oi! Segue o link pra iniciar o rastreamento da entrega: https://francksburger.com.br/entrega/${deliverySession.token}`
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="min-h-10 rounded-lg bg-success-bg px-3.5 py-2 text-xs font-bold text-success"
+                >
+                  Enviar no WhatsApp
+                </a>
+                <button
+                  onClick={() =>
+                    navigator.clipboard.writeText(`https://francksburger.com.br/entrega/${deliverySession.token}`)
+                  }
+                  className="min-h-10 rounded-lg bg-cream-soft px-3.5 py-2 text-xs font-bold text-coffee-soft"
+                >
+                  Copiar link
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
       {problematicOrders.length > 0 && (
         <section className="flex flex-col gap-2 rounded-2xl bg-white p-4">
           <h2 className="text-xs font-extrabold uppercase tracking-wide text-danger">
@@ -575,66 +637,6 @@ export function RoutePlannerScreen({
 
       {routeResult && routeResult.stops.length > 0 && (
         <>
-          <section className="flex flex-col gap-2 rounded-2xl bg-white p-4">
-            <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">
-              Rastreamento ao vivo do motoboy
-            </h2>
-            {!deliverySession ? (
-              <button
-                onClick={createTrackingLink}
-                disabled={creatingSession}
-                className="min-h-11 self-start rounded-xl bg-orange px-4 text-sm font-bold text-white disabled:opacity-50"
-              >
-                {creatingSession ? "Criando…" : "Criar link para o motoboy"}
-              </button>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-bold ${
-                      deliverySession.status === "active"
-                        ? "bg-success-bg text-success"
-                        : deliverySession.status === "ended"
-                          ? "bg-cream-soft text-coffee-soft"
-                          : "bg-warning-bg text-warning"
-                    }`}
-                  >
-                    {deliverySession.status === "active"
-                      ? "🛵 Em entrega"
-                      : deliverySession.status === "ended"
-                        ? "Encerrado"
-                        : "Aguardando o motoboy iniciar"}
-                  </span>
-                  {deliverySession.updated_at && deliverySession.status === "active" && (
-                    <span className="text-xs text-coffee-soft">
-                      Atualizado {new Date(deliverySession.updated_at).toLocaleTimeString("pt-BR")}
-                    </span>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <a
-                    href={`https://wa.me/?text=${encodeURIComponent(
-                      `Oi! Segue o link pra iniciar o rastreamento da entrega: https://francksburger.com.br/entrega/${deliverySession.token}`
-                    )}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="min-h-10 rounded-lg bg-success-bg px-3.5 py-2 text-xs font-bold text-success"
-                  >
-                    Enviar no WhatsApp
-                  </a>
-                  <button
-                    onClick={() =>
-                      navigator.clipboard.writeText(`https://francksburger.com.br/entrega/${deliverySession.token}`)
-                    }
-                    className="min-h-10 rounded-lg bg-cream-soft px-3.5 py-2 text-xs font-bold text-coffee-soft"
-                  >
-                    Copiar link
-                  </button>
-                </div>
-              </div>
-            )}
-          </section>
-
           <section className="rounded-2xl bg-white p-2">
             <div ref={mapContainerRef} className="h-[360px] w-full rounded-xl" />
           </section>
