@@ -84,7 +84,7 @@ export function OrderDetailScreen({
   function buildConfirmationMessage() {
     const firstName = order.customer_name.trim().split(/\s+/)[0];
     const prepDate = order.editions?.prep_date;
-    const dateText = prepDate ? ` dia ${formatDate(`${prepDate}T12:00:00`)}` : "";
+    const dateText = prepDate ? ` dia ${formatDate(prepDate)}` : "";
     return `Oi, ${firstName}! Seu pedido Franck's Burger foi confirmado ✅ Vai chegar até você${dateText} no horário ${order.window_label_snapshot}. Qualquer coisa, é só chamar por aqui!`;
   }
 
