@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import { silentlyLinkExistingSubscription } from "@/lib/push";
 import { formatCents, formatDate, formatWeekday } from "@/lib/format";
 import { fbTrack } from "@/lib/fbpixel";
+import { gtagEvent } from "@/lib/gtag";
 import { QtyStepper } from "./QtyStepper";
 import type {
   DeliveryWindow,
@@ -95,6 +96,11 @@ export function CheckoutScreen({
       currency: "BRL",
       num_items: items.reduce((sum, i) => sum + i.qty, 0),
     });
+    gtagEvent("begin_checkout", {
+      currency: "BRL",
+      value: subtotalCents / 100,
+      items: items.map((i) => ({ item_id: i.productId, item_name: i.name, quantity: i.qty })),
+    });
   }, []);
 
   const productMap = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
@@ -170,6 +176,12 @@ export function CheckoutScreen({
       currency: "BRL",
       content_type: "product",
       num_items: items.reduce((sum, i) => sum + i.qty, 0),
+    });
+    gtagEvent("purchase", {
+      transaction_id: result.public_token,
+      currency: "BRL",
+      value: totalCents / 100,
+      items: items.map((i) => ({ item_id: i.productId, item_name: i.name, quantity: i.qty })),
     });
     clear();
     silentlyLinkExistingSubscription(result.public_token);

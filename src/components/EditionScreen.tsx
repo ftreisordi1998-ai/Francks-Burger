@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import { ensurePushSubscription, isAndroid, isIOS, isPushSupported, isStandalone } from "@/lib/push";
 import { formatDate, formatDateTime, formatWeekday } from "@/lib/format";
 import { fbTrack } from "@/lib/fbpixel";
+import { gtagEvent } from "@/lib/gtag";
 import {
   canOrder,
   getEditionSituation,
@@ -148,6 +149,11 @@ export function EditionScreen({
         content_type: "product",
         value: product.price_cents / 100,
         currency: "BRL",
+      });
+      gtagEvent("view_item", {
+        currency: "BRL",
+        value: product.price_cents / 100,
+        items: [{ item_id: product.id, item_name: product.name }],
       });
       return;
     }

@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import { CartProvider } from "@/lib/cart-context";
 import { DialogProvider } from "@/lib/dialog-context";
 import { MetaPixel } from "@/components/MetaPixel";
+import { GoogleAdsTag } from "@/components/GoogleAdsTag";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -54,6 +55,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="pt-BR" className={`${jakarta.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-cream text-coffee">
         <MetaPixel />
+        <GoogleAdsTag />
         <DialogProvider>
           <CartProvider>{children}</CartProvider>
         </DialogProvider>
