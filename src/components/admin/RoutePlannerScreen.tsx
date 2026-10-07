@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import mapboxgl from "mapbox-gl";
-import "mapbox-gl/dist/mapbox-gl.css";
+import * as maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { createClient } from "@/lib/supabase/client";
+import { ensureMaplibreWorker } from "@/lib/maplibre-worker-setup";
 import type {
   DeliverySession,
   EditionOption,
@@ -15,6 +16,8 @@ import type {
 } from "@/lib/types";
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+const MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
+const ROUTE_ORANGE = "#e8540f";
 
 const GEOCODE_REASON_LABEL: Record<GeocodeStatus, string> = {
   ok: "Localizado",
@@ -33,6 +36,26 @@ function formatDuration(seconds: number): string {
 
 function formatDistance(meters: number): string {
   return `${(meters / 1000).toFixed(1)} km`;
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function storeIconEl(): HTMLDivElement {
+  const el = document.createElement("div");
+  el.style.cssText =
+    "width:30px;height:30px;border-radius:50%;background:#2f1a12;display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.35)";
+  el.innerHTML =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M3 9l1.5-5h15L21 9M3 9v10a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-4h8v4a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1V9M3 9h18" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  return el;
+}
+
+function stopMarkerEl(index: number, active: boolean): HTMLDivElement {
+  const el = document.createElement("div");
+  el.style.cssText = `width:${active ? 34 : 28}px;height:${active ? 34 : 28}px;border-radius:50%;background:${ROUTE_ORANGE};color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${active ? 15 : 13}px;border:2px solid white;box-shadow:${active ? "0 2px 10px rgba(0,0,0,0.45)" : "0 1px 4px rgba(0,0,0,0.3)"};transition:width 150ms,height 150ms;cursor:pointer;`;
+  el.textContent = String(index);
+  return el;
 }
 
 export function RoutePlannerScreen({
@@ -55,6 +78,8 @@ export function RoutePlannerScreen({
   const [generating, setGenerating] = useState(false);
   const [routeResult, setRouteResult] = useState<RoutePlanResult | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [selectedStop, setSelectedStop] = useState<number | null>(null);
 
   const [kitchen, setKitchen] = useState(kitchenLocation);
   const [editingKitchen, setEditingKitchen] = useState(!kitchen?.confirmed_at);
@@ -73,9 +98,10 @@ export function RoutePlannerScreen({
   >([]);
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<mapboxgl.Map | null>(null);
-  const markersRef = useRef<mapboxgl.Marker[]>([]);
-  const courierMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const markersRef = useRef<maplibregl.Marker[]>([]);
+  const courierMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const lastBoundsRef = useRef<maplibregl.LngLatBounds | null>(null);
 
   const [deliverySession, setDeliverySession] = useState<DeliverySession | null>(null);
   const [creatingSession, setCreatingSession] = useState(false);
@@ -143,9 +169,10 @@ export function RoutePlannerScreen({
     if (!courierMarkerRef.current) {
       const el = document.createElement("div");
       el.style.cssText =
-        "width:32px;height:32px;border-radius:50%;background:#2563eb;display:flex;align-items:center;justify-content:center;font-size:17px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.35);transition:transform 1s linear;";
-      el.textContent = "🛵";
-      courierMarkerRef.current = new mapboxgl.Marker({ element: el }).setLngLat(lngLat).addTo(map);
+        "width:28px;height:28px;border-radius:50%;background:#2563eb;display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.35);transition:transform 1s linear;";
+      el.innerHTML =
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2"><path d="M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0ZM15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0ZM7 17h6m-3-5 2-5h3l2 4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      courierMarkerRef.current = new maplibregl.Marker({ element: el }).setLngLat(lngLat).addTo(map);
     } else {
       courierMarkerRef.current.setLngLat(lngLat);
     }
@@ -199,6 +226,7 @@ export function RoutePlannerScreen({
       setSelected(new Set(rows.map((r) => r.id)));
       setRouteResult(null);
       setRouteError(null);
+      setSelectedStop(null);
       setLoadingOrders(false);
     }
     fetchOrders();
@@ -207,100 +235,108 @@ export function RoutePlannerScreen({
   const showMapSection = Boolean(deliverySession) || Boolean(routeResult && routeResult.stops.length > 0);
 
   useEffect(() => {
-    if (!MAPBOX_TOKEN || !mapContainerRef.current || mapRef.current) return;
-    mapboxgl.accessToken = MAPBOX_TOKEN;
-    mapRef.current = new mapboxgl.Map({
+    if (!mapContainerRef.current || mapRef.current) return;
+    ensureMaplibreWorker();
+    const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: "mapbox://styles/mapbox/navigation-day-v1",
+      style: MAP_STYLE,
       center: [-50.79, -23.21],
-      zoom: 15,
-      pitch: 50,
-      antialias: true,
+      zoom: 14,
+      pitch: 0,
+      bearing: 0,
+      attributionControl: { compact: true },
     });
-    mapRef.current.on("load", () => {
-      const map = mapRef.current;
-      if (!map || map.getLayer("3d-buildings")) return;
-      map.addLayer({
-        id: "3d-buildings",
-        source: "composite",
-        "source-layer": "building",
-        filter: ["==", "extrude", "true"],
-        type: "fill-extrusion",
-        minzoom: 14,
-        paint: {
-          "fill-extrusion-color": "#d8d3c4",
-          "fill-extrusion-height": ["get", "height"],
-          "fill-extrusion-base": ["get", "min_height"],
-          "fill-extrusion-opacity": 0.75,
-        },
-      });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.on("error", (e) => {
+      console.error("Map error", e);
+      setMapError("Não foi possível carregar o mapa agora. Tente recarregar a página.");
     });
+    mapRef.current = map;
     // O container só existe no DOM quando essa condição vira true — se o efeito
     // rodasse só uma vez (deps vazias), ele rodaria antes da seção aparecer e
     // nunca criaria o mapa.
   }, [showMapSection]);
 
+  function fitToRoute() {
+    const map = mapRef.current;
+    const bounds = lastBoundsRef.current;
+    if (!map || !bounds || bounds.isEmpty()) return;
+    map.fitBounds(bounds, { padding: { top: 60, bottom: 60, left: 60, right: 60 }, maxZoom: 16, duration: prefersReducedMotion() ? 0 : 500 });
+  }
+
+  function flyToStop(index: number) {
+    const map = mapRef.current;
+    const stop = routeResult?.stops.find((s) => s.stopIndex === index);
+    if (!map || !stop) return;
+    setSelectedStop(index);
+    map.flyTo({ center: [stop.lng, stop.lat], zoom: 16.5, duration: prefersReducedMotion() ? 0 : 600, essential: true });
+  }
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !routeResult) return;
 
-    markersRef.current.forEach((m) => m.remove());
-    markersRef.current = [];
+    function draw() {
+      if (!map) return;
+      markersRef.current.forEach((m) => m.remove());
+      markersRef.current = [];
 
-    const bounds = new mapboxgl.LngLatBounds();
+      const bounds = new maplibregl.LngLatBounds();
 
-    if (kitchen?.lat && kitchen?.lng) {
-      const el = document.createElement("div");
-      el.style.cssText =
-        "width:28px;height:28px;border-radius:50%;background:#2f7a4f;color:white;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:14px;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4)";
-      el.textContent = "C";
-      markersRef.current.push(new mapboxgl.Marker({ element: el }).setLngLat([kitchen.lng, kitchen.lat]).addTo(map));
-      bounds.extend([kitchen.lng, kitchen.lat]);
-    }
+      if (kitchen?.lat && kitchen?.lng) {
+        markersRef.current.push(new maplibregl.Marker({ element: storeIconEl() }).setLngLat([kitchen.lng, kitchen.lat]).addTo(map));
+        bounds.extend([kitchen.lng, kitchen.lat]);
+      }
 
-    for (const stop of routeResult.stops) {
-      const el = document.createElement("div");
-      el.style.cssText =
-        "width:26px;height:26px;border-radius:50%;background:#e8540f;color:white;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:13px;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4)";
-      el.textContent = String(stop.stopIndex);
-      markersRef.current.push(
-        new mapboxgl.Marker({ element: el }).setLngLat([stop.lng, stop.lat]).addTo(map)
-      );
-      bounds.extend([stop.lng, stop.lat]);
-    }
-
-    if (routeResult.geometry) {
-      const sourceId = "route-line";
-      const geojson = { type: "Feature" as const, properties: {}, geometry: routeResult.geometry };
-      if (map.getSource(sourceId)) {
-        (map.getSource(sourceId) as mapboxgl.GeoJSONSource).setData(geojson);
-      } else {
-        map.on("load", () => {
-          if (map.getSource(sourceId)) return;
-          map.addSource(sourceId, { type: "geojson", data: geojson });
-          map.addLayer({
-            id: sourceId,
-            type: "line",
-            source: sourceId,
-            paint: { "line-color": "#e8540f", "line-width": 4 },
-          });
+      for (const stop of routeResult!.stops) {
+        const el = stopMarkerEl(stop.stopIndex, selectedStop === stop.stopIndex);
+        el.addEventListener("click", (e: MouseEvent) => {
+          e.stopPropagation();
+          flyToStop(stop.stopIndex);
         });
-        if (map.isStyleLoaded()) {
+        markersRef.current.push(new maplibregl.Marker({ element: el }).setLngLat([stop.lng, stop.lat]).addTo(map));
+        bounds.extend([stop.lng, stop.lat]);
+      }
+
+      if (routeResult!.geometry) {
+        const sourceId = "route-line";
+        const geojson = { type: "Feature" as const, properties: {}, geometry: routeResult!.geometry };
+        const existing = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
+        if (existing) {
+          existing.setData(geojson);
+        } else {
           map.addSource(sourceId, { type: "geojson", data: geojson });
           map.addLayer({
-            id: sourceId,
+            id: "route-line-halo",
             type: "line",
             source: sourceId,
-            paint: { "line-color": "#e8540f", "line-width": 4 },
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.9 },
+          });
+          map.addLayer({
+            id: "route-line",
+            type: "line",
+            source: sourceId,
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-color": ROUTE_ORANGE, "line-width": 5 },
           });
         }
       }
+
+      if (!bounds.isEmpty()) {
+        lastBoundsRef.current = bounds;
+        map.fitBounds(bounds, {
+          padding: { top: 60, bottom: 60, left: 60, right: 60 },
+          maxZoom: 16,
+          duration: prefersReducedMotion() ? 0 : 500,
+        });
+      }
     }
 
-    if (!bounds.isEmpty()) {
-      map.fitBounds(bounds, { padding: 60, maxZoom: 16, pitch: 50 });
-    }
-  }, [routeResult, kitchen]);
+    if (map.isStyleLoaded()) draw();
+    else map.once("load", draw);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeResult, kitchen, selectedStop]);
 
   const eligibleCount = orders.length;
 
@@ -377,6 +413,7 @@ export function RoutePlannerScreen({
     setGenerating(true);
     setRouteError(null);
     setRouteResult(null);
+    setSelectedStop(null);
     const res = await fetch("/api/admin/route-plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -389,7 +426,6 @@ export function RoutePlannerScreen({
       return;
     }
     setRouteResult(data);
-    // Pedidos problemáticos podem ter sido geocodificados agora — atualiza status local.
     setOrders((prev) =>
       prev.map((o) => {
         const failed = (data.failedOrders as { id: string; reason: GeocodeStatus }[]).find((f) => f.id === o.id);
@@ -402,6 +438,8 @@ export function RoutePlannerScreen({
     () => orders.filter((o) => o.address_geocode_status === "ambiguous" || o.address_geocode_status === "failed"),
     [orders]
   );
+
+  const selectedStopData = routeResult?.stops.find((s) => s.stopIndex === selectedStop) ?? null;
 
   if (!MAPBOX_TOKEN) {
     return (
@@ -549,7 +587,7 @@ export function RoutePlannerScreen({
       {selectedWindowId && (
         <section className="flex flex-col gap-2 rounded-2xl bg-white p-4">
           <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">
-            Rastreamento ao vivo do motoboy
+            Acompanhamento ao vivo do motoboy
           </h2>
           {!deliverySession ? (
             <button
@@ -572,7 +610,7 @@ export function RoutePlannerScreen({
                   }`}
                 >
                   {deliverySession.status === "active"
-                    ? "🛵 Em entrega"
+                    ? "Em entrega"
                     : deliverySession.status === "ended"
                       ? "Encerrado"
                       : "Aguardando o motoboy iniciar"}
@@ -661,44 +699,98 @@ export function RoutePlannerScreen({
       )}
 
       {showMapSection && (
-        <section className="rounded-2xl bg-white p-2">
-          <div ref={mapContainerRef} className="h-[360px] w-full rounded-xl" />
-          {deliverySession && !routeResult && (
-            <p className="px-2 pb-1 pt-2 text-xs text-coffee-soft">
-              {deliverySession.status === "active"
-                ? "🛵 Mostrando a posição do motoboy ao vivo."
-                : "Mapa pronto — assim que o motoboy iniciar a entrega pelo link, a posição aparece aqui."}
-            </p>
-          )}
-        </section>
-      )}
-
-      {routeResult && routeResult.stops.length > 0 && (
-        <>
-          <section className="flex flex-col gap-3 rounded-2xl bg-white p-4">
-            <div className="flex flex-wrap gap-4 text-sm font-bold text-coffee">
-              <span>Distância total: {formatDistance(routeResult.totalDistanceMeters)}</span>
-              <span>Tempo estimado: {formatDuration(routeResult.totalDurationSeconds)}</span>
+        <section className="overflow-hidden rounded-2xl bg-white">
+          {routeResult && routeResult.stops.length > 0 && (
+            <div className="flex flex-wrap items-center gap-4 border-b border-cream-soft px-4 py-3 text-sm font-bold text-coffee">
+              <span className="rounded-full bg-cream-soft px-3 py-1 text-xs font-bold text-coffee-soft">
+                {routeResult.stops.length} parada{routeResult.stops.length === 1 ? "" : "s"}
+              </span>
+              <span>{formatDistance(routeResult.totalDistanceMeters)}</span>
+              <span>{formatDuration(routeResult.totalDurationSeconds)}</span>
+              <span className="ml-auto text-xs font-semibold uppercase tracking-wide text-coffee-soft">
+                Rota planejada
+              </span>
             </div>
-            <div className="flex flex-col gap-2">
-              {routeResult.stops.map((stop) => (
-                <div key={stop.stopIndex} className="flex gap-3 rounded-lg border border-coffee/10 px-3 py-2.5">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange text-sm font-bold text-white">
-                    {stop.stopIndex}
+          )}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px]">
+            <div className="relative">
+              <div ref={mapContainerRef} className="h-[380px] w-full lg:h-[520px]" />
+
+              {routeResult && routeResult.stops.length > 0 && (
+                <button
+                  onClick={fitToRoute}
+                  className="absolute left-3 top-3 min-h-9 rounded-lg bg-white/95 px-3 text-xs font-bold text-coffee shadow-md"
+                >
+                  Ver rota completa
+                </button>
+              )}
+
+              {mapError && (
+                <div className="absolute inset-x-3 top-3 rounded-lg bg-danger-bg px-3 py-2 text-xs font-semibold text-danger shadow-md">
+                  {mapError}
+                </div>
+              )}
+
+              {selectedStopData && (
+                <div className="absolute bottom-3 left-3 right-3 flex items-start gap-2 rounded-xl bg-white p-3 shadow-lg sm:right-auto sm:max-w-xs">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange text-xs font-bold text-white">
+                    {selectedStopData.stopIndex}
                   </span>
-                  <div className="flex-1">
-                    {stop.orders.map((o) => (
-                      <p key={o.id} className="text-sm">
-                        <span className="font-bold text-coffee">{o.customerName}</span>
-                        {o.items && <span className="text-coffee-soft"> — {o.items}</span>}
+                  <div className="min-w-0 flex-1">
+                    {selectedStopData.orders.map((o) => (
+                      <p key={o.id} className="truncate text-sm font-bold text-coffee">
+                        {o.customerName}
                       </p>
                     ))}
                   </div>
+                  <button
+                    onClick={() => setSelectedStop(null)}
+                    aria-label="Fechar"
+                    className="shrink-0 text-coffee-soft"
+                  >
+                    ✕
+                  </button>
                 </div>
-              ))}
+              )}
+
+              {deliverySession && !(routeResult && routeResult.stops.length > 0) && (
+                <p className="absolute bottom-3 left-3 rounded-lg bg-white/95 px-3 py-1.5 text-xs text-coffee-soft shadow-md">
+                  {deliverySession.status === "active"
+                    ? "Mostrando a posição do motoboy ao vivo."
+                    : "Assim que o motoboy iniciar pelo link, a posição aparece aqui."}
+                </p>
+              )}
             </div>
-          </section>
-        </>
+
+            {routeResult && routeResult.stops.length > 0 && (
+              <div className="flex flex-col gap-1.5 border-t border-cream-soft p-3 lg:max-h-[520px] lg:overflow-y-auto lg:border-l lg:border-t-0">
+                {routeResult.stops.map((stop) => (
+                  <button
+                    key={stop.stopIndex}
+                    onClick={() => flyToStop(stop.stopIndex)}
+                    className={`flex gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                      selectedStop === stop.stopIndex
+                        ? "border-orange bg-orange-soft/40"
+                        : "border-coffee/10 hover:bg-cream-soft"
+                    }`}
+                  >
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange text-sm font-bold text-white">
+                      {stop.stopIndex}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      {stop.orders.map((o) => (
+                        <p key={o.id} className="truncate text-sm">
+                          <span className="font-bold text-coffee">{o.customerName}</span>
+                          {o.items && <span className="text-coffee-soft"> — {o.items}</span>}
+                        </p>
+                      ))}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
       )}
     </div>
   );

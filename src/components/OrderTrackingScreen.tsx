@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import mapboxgl from "mapbox-gl";
-import "mapbox-gl/dist/mapbox-gl.css";
+import * as maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { Logo } from "./Logo";
 import { Badge } from "./Badge";
 import { createClient } from "@/lib/supabase/client";
+import { ensureMaplibreWorker } from "@/lib/maplibre-worker-setup";
 import { useSwipeBack } from "@/lib/useSwipeBack";
 import { PixPayment } from "./PixPayment";
 import { buildStoreWhatsAppUrl } from "@/lib/contact";
@@ -28,6 +29,7 @@ import type { ActiveDeliveryPosition, OrderTrackingView } from "@/lib/types";
 type PushCardState = "hidden" | "offer" | "subscribed" | "denied" | "error";
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+const MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 
 export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingView }) {
   const [order, setOrder] = useState(initial);
@@ -38,8 +40,8 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
   useSwipeBack(() => router.push("/"));
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<mapboxgl.Map | null>(null);
-  const markerRef = useRef<mapboxgl.Marker | null>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const markerRef = useRef<maplibregl.Marker | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const prevLngLatRef = useRef<[number, number] | null>(null);
 
@@ -72,39 +74,22 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
     const lngLat: [number, number] = [deliveryPos.lng!, deliveryPos.lat!];
 
     if (!mapRef.current) {
-      mapboxgl.accessToken = MAPBOX_TOKEN;
-      mapRef.current = new mapboxgl.Map({
+      ensureMaplibreWorker();
+      mapRef.current = new maplibregl.Map({
         container: mapContainerRef.current,
-        style: "mapbox://styles/mapbox/navigation-day-v1",
+        style: MAP_STYLE,
         center: lngLat,
-        zoom: 16.5,
-        pitch: 55,
-        bearing: deliveryPos.heading ?? 0,
-        antialias: true,
-      });
-      mapRef.current.on("load", () => {
-        const map = mapRef.current;
-        if (!map || map.getLayer("3d-buildings")) return;
-        map.addLayer({
-          id: "3d-buildings",
-          source: "composite",
-          "source-layer": "building",
-          filter: ["==", "extrude", "true"],
-          type: "fill-extrusion",
-          minzoom: 14,
-          paint: {
-            "fill-extrusion-color": "#d8d3c4",
-            "fill-extrusion-height": ["get", "height"],
-            "fill-extrusion-base": ["get", "min_height"],
-            "fill-extrusion-opacity": 0.75,
-          },
-        });
+        zoom: 16,
+        pitch: 0,
+        bearing: 0,
+        attributionControl: { compact: true },
       });
       const el = document.createElement("div");
       el.style.cssText =
-        "width:34px;height:34px;border-radius:50%;background:#e8540f;display:flex;align-items:center;justify-content:center;font-size:18px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.35);transition:transform 1s linear;";
-      el.textContent = "🛵";
-      markerRef.current = new mapboxgl.Marker({ element: el }).setLngLat(lngLat).addTo(mapRef.current);
+        "width:32px;height:32px;border-radius:50%;background:#e8540f;display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.35);transition:transform 1s linear;";
+      el.innerHTML =
+        '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2"><path d="M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0ZM15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0ZM7 17h6m-3-5 2-5h3l2 4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      markerRef.current = new maplibregl.Marker({ element: el }).setLngLat(lngLat).addTo(mapRef.current);
       prevLngLatRef.current = lngLat;
       return;
     }
@@ -126,11 +111,7 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
       }
     }
     animFrameRef.current = requestAnimationFrame(step);
-    mapRef.current.easeTo({
-      center: to,
-      bearing: deliveryPos.heading ?? mapRef.current.getBearing(),
-      duration: durationMs,
-    });
+    mapRef.current.easeTo({ center: to, duration: durationMs });
   }, [deliveryPos, showLiveMap]);
 
   useEffect(() => {
