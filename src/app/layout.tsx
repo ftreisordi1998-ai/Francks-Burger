@@ -12,9 +12,34 @@ const jakarta = Plus_Jakarta_Sans({
   weight: ["400", "500", "600", "700", "800"],
 });
 
-const title = "Franck's Burger — Burgers na brasa, por encomenda";
+const title = "Franck's Burger — Burgers na brasa, por encomenda em Uraí";
 const description =
-  "Encomende burgers artesanais feitos na churrasqueira por edição semanal limitada.";
+  "Hambúrguer artesanal feito na brasa, por encomenda, em Uraí - PR. Peça o seu em uma das edições semanais limitadas.";
+
+const localBusinessJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FastFoodRestaurant",
+  name: "Franck's Burger",
+  description,
+  url: "https://francksburger.com.br",
+  image: "https://francksburger.com.br/og-image.png",
+  servesCuisine: "Hambúrguer artesanal",
+  priceRange: "R$R$",
+  areaServed: {
+    "@type": "City",
+    name: "Uraí",
+    containedInPlace: {
+      "@type": "State",
+      name: "Paraná",
+    },
+  },
+  address: {
+    "@type": "PostalAddress",
+    addressLocality: "Uraí",
+    addressRegion: "PR",
+    addressCountry: "BR",
+  },
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://francksburger.com.br"),
@@ -54,6 +79,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="pt-BR" className={`${jakarta.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-cream text-coffee">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(localBusinessJsonLd) }}
+        />
         <MetaPixel />
         <GoogleAdsTag />
         <DialogProvider>
