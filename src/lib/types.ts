@@ -58,6 +58,13 @@ export interface FinanceIncome {
   created_at: string;
 }
 
+export interface PreviousOrderRow {
+  id: string;
+  created_at: string;
+  order_status: OrderStatus;
+  edition_title: string;
+}
+
 export interface OrderIncomeRow {
   id: string;
   customer_name: string;

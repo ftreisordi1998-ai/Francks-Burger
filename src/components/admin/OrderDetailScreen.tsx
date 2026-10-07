@@ -17,7 +17,7 @@ import {
   PAYMENT_STATUS_LABEL,
   PAYMENT_STATUS_TONE,
 } from "@/lib/status";
-import type { AdminOrderRow, OrderStatus, Product } from "@/lib/types";
+import type { AdminOrderRow, OrderStatus, PreviousOrderRow, Product } from "@/lib/types";
 
 interface OrderItemRow {
   id: string;
@@ -59,10 +59,12 @@ export function OrderDetailScreen({
   order: initial,
   items: initialItems,
   products,
+  previousOrders,
 }: {
   order: AdminOrderRow;
   items: OrderItemRow[];
   products: Product[];
+  previousOrders: PreviousOrderRow[];
 }) {
   const [order, setOrder] = useState(initial);
   const [items, setItems] = useState(initialItems);
@@ -337,7 +339,37 @@ export function OrderDetailScreen({
           {ORDER_STATUS_LABEL[order.order_status]}
         </Badge>
         <Badge tone="info">{PAYMENT_METHOD_LABEL[order.payment_method]}</Badge>
+        {previousOrders.length > 0 && (
+          <Badge tone="success">
+            Cliente recorrente · {previousOrders.length + 1}ª compra
+          </Badge>
+        )}
       </div>
+
+      {previousOrders.length > 0 && (
+        <details className="mt-3 rounded-xl bg-cream-soft px-4 py-3 text-sm">
+          <summary className="cursor-pointer font-bold text-coffee">
+            Pedidos anteriores desse WhatsApp ({previousOrders.length})
+          </summary>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {previousOrders.map((p) => (
+              <li key={p.id}>
+                <Link
+                  href={`/admin/pedidos/${p.id}`}
+                  className="flex items-center justify-between gap-2 text-coffee-soft hover:text-orange"
+                >
+                  <span>
+                    {formatDateTime(p.created_at)} · {p.edition_title}
+                  </span>
+                  <Badge tone={ORDER_STATUS_TONE[p.order_status]}>
+                    {ORDER_STATUS_LABEL[p.order_status]}
+                  </Badge>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       {order.payment_method === "cash" && (
         <div className="mt-3 rounded-xl bg-orange-soft px-4 py-3 text-sm font-semibold text-orange-dark">

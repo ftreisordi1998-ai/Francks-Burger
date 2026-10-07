@@ -267,6 +267,23 @@ export function EditionEditorScreen({
         }))
       );
     }
+    // Os gastos costumam se repetir toda edição (carne, pão, carvão, motoboy...) —
+    // copia a descrição e o valor como referência, mas sempre como "previsto":
+    // a cópia ainda não foi paga de verdade, isso tem que ser conferido de novo.
+    const { data: expensesToCopy } = await supabase
+      .from("finance_expenses")
+      .select("description, amount_cents")
+      .eq("edition_id", edition.id);
+    if (expensesToCopy && expensesToCopy.length > 0) {
+      await supabase.from("finance_expenses").insert(
+        expensesToCopy.map((e) => ({
+          edition_id: newEdition.id,
+          description: e.description,
+          amount_cents: e.amount_cents,
+          status: "previsto",
+        }))
+      );
+    }
     router.push(`/admin/edicoes/${newEdition.id}`);
   }
 

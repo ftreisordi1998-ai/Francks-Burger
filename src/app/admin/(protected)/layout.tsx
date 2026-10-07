@@ -23,7 +23,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="min-h-dvh bg-cream-soft">
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-coffee/10 bg-cream px-5 py-3">
         <div className="flex items-center gap-5">
-          <span className="text-sm font-extrabold text-coffee">Franck&rsquo;s Burger · Admin</span>
+          <Link href="/admin" className="text-sm font-extrabold text-coffee hover:text-orange">
+            Franck&rsquo;s Burger · Admin
+          </Link>
           <nav className="hidden gap-4 text-sm font-semibold text-coffee-soft sm:flex">
             <Link href="/admin/pedidos" className="hover:text-orange">
               Pedidos

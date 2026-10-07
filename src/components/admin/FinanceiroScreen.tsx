@@ -270,6 +270,50 @@ export function FinanceiroScreen({
     return rows.sort((a, b) => b.date.localeCompare(a.date));
   }, [orderIncomes, incomes, expenses]);
 
+  function exportCsv() {
+    const editionTitle = editions.find((e) => e.id === selectedEditionId)?.title ?? "edicao";
+    const csvCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
+    const lines: string[] = [];
+    lines.push(["Resumo", ""].map(csvCell).join(";"));
+    lines.push(["Faturamento previsto", (projected / 100).toFixed(2).replace(".", ",")].map(csvCell).join(";"));
+    lines.push(
+      ["Total recebido", (summary.totalReceived / 100).toFixed(2).replace(".", ",")].map(csvCell).join(";")
+    );
+    lines.push(
+      ["Em aberto (a receber)", (openAmountCents / 100).toFixed(2).replace(".", ",")].map(csvCell).join(";")
+    );
+    lines.push(
+      ["Total de despesas", (summary.expensesTotal / 100).toFixed(2).replace(".", ",")].map(csvCell).join(";")
+    );
+    lines.push(
+      ["Total já pago", (summary.expensesPago / 100).toFixed(2).replace(".", ",")].map(csvCell).join(";")
+    );
+    lines.push(
+      ["Sobra estimada", (summary.sobraEstimada / 100).toFixed(2).replace(".", ",")].map(csvCell).join(";")
+    );
+    lines.push(
+      ["Sobra atual em caixa", (summary.sobraAtual / 100).toFixed(2).replace(".", ",")].map(csvCell).join(";")
+    );
+    lines.push("");
+    lines.push(["Data", "Tipo", "Descrição", "Detalhe", "Valor (R$)"].map(csvCell).join(";"));
+    for (const row of ledger) {
+      const signedValue = ((row.sign * row.amountCents) / 100).toFixed(2).replace(".", ",");
+      lines.push(
+        [formatDateTime(row.date), row.kind, row.description, row.detail, signedValue]
+          .map(csvCell)
+          .join(";")
+      );
+    }
+    const csv = "﻿" + lines.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `financeiro-${editionTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (!selectedEditionId) {
     return (
       <div className="rounded-2xl bg-white p-6 text-center text-sm text-coffee-soft">
@@ -562,9 +606,14 @@ export function FinanceiroScreen({
       </section>
 
       <section className="flex flex-col gap-3 rounded-2xl bg-white p-4">
-        <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">
-          Todos os lançamentos
-        </h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">
+            Todos os lançamentos
+          </h2>
+          <button onClick={exportCsv} className="text-sm font-bold text-orange">
+            Exportar CSV
+          </button>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
