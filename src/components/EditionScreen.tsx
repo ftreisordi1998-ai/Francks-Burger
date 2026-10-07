@@ -312,15 +312,11 @@ export function EditionScreen({
         <div className="mx-5 mt-5 flex flex-col items-center gap-3 rounded-2xl bg-white px-6 py-7 text-center lg:mx-8">
           <span className="text-3xl">🎉</span>
           <h2 className="text-lg font-extrabold leading-tight text-coffee">
-            Essa edição foi um sucesso — os pedidos encerraram!
+            Essa edição foi um sucesso — pedidos encerrados!
           </h2>
           <p className="text-sm leading-relaxed text-coffee-soft">
-            Muito obrigado a todos que encomendaram! Agora é só aguardar a próxima edição.
-          </p>
-          <p className="text-sm leading-relaxed text-coffee-soft">
-            Enquanto isso, entra no nosso grupo do WhatsApp (o botão é aqui embaixo ⬇️): é lá que
-            eu posto a produção dos burgers, o pessoal manda foto do pedido e dá seu feedback de
-            verdade — e você fica sabendo na hora assim que a próxima edição abrir.
+            Obrigado a todos que encomendaram. Entra no grupo do WhatsApp pra acompanhar a
+            produção e saber quando abrir a próxima ⬇️
           </p>
           <svg
             className="nudge-arrow mt-1 text-success"
