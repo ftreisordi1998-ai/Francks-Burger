@@ -165,13 +165,30 @@ select {
   animation: links-cta-pulse 900ms ease-out 1;
 }
 
+@keyframes nudge-arrow {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateY(8px);
+    opacity: 1;
+  }
+}
+
+.nudge-arrow {
+  animation: nudge-arrow 1.4s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-sheet-up,
   .animate-fade-in,
   .animate-dialog-pop,
   .links-reveal,
   .links-float,
-  .links-cta-pulse {
+  .links-cta-pulse,
+  .nudge-arrow {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
