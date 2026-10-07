@@ -15,20 +15,39 @@ import type {
   OrderIncomeRow,
 } from "@/lib/types";
 
-const EXPENSE_SUGGESTIONS = [
-  "Carne, pão, cheddar e bacon",
-  "Alface, tomate, cebola roxa e rúcula",
-  "Cebola e demais ingredientes da cebola caramelizada",
-  "Maionese caseira (pronta)",
-  "Ingredientes da maionese caseira",
-  "Manteiga, sal e outros temperos",
-  "Embalagens, sacolas e guardanapos",
-  "Carvão, gás, água, energia e limpeza",
-  "Motoboy",
-  "Mão de obra",
-  "Taxas do cartão",
-  "Impostos",
-  "Outros gastos",
+const EXPENSE_SUGGESTION_GROUPS: { label: string; items: string[] }[] = [
+  {
+    label: "Insumos do lanche",
+    items: ["Carne", "Pão", "Cheddar", "Bacon"],
+  },
+  {
+    label: "Salada",
+    items: ["Alface", "Tomate", "Cebola roxa", "Rúcula"],
+  },
+  {
+    label: "Cebola caramelizada",
+    items: ["Cebola caramelizada"],
+  },
+  {
+    label: "Maionese caseira (uma ou outra, não as duas)",
+    items: ["Maionese caseira (pronta)", "Ingredientes da maionese caseira"],
+  },
+  {
+    label: "Temperos",
+    items: ["Manteiga", "Sal e temperos"],
+  },
+  {
+    label: "Embalagem",
+    items: ["Embalagens", "Sacolas", "Guardanapos"],
+  },
+  {
+    label: "Operacional",
+    items: ["Carvão", "Gás", "Água", "Energia", "Limpeza"],
+  },
+  {
+    label: "Mão de obra e taxas",
+    items: ["Motoboy", "Mão de obra", "Taxas do cartão", "Impostos", "Outros gastos"],
+  },
 ];
 
 function centsToInput(cents: number): string {
@@ -402,15 +421,26 @@ export function FinanceiroScreen({
 
       <section className="flex flex-col gap-3 rounded-2xl bg-white p-4">
         <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">Despesas</h2>
-        <div className="flex flex-wrap gap-1.5">
-          {EXPENSE_SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              onClick={() => setExpenseDesc(s)}
-              className="rounded-full bg-cream-soft px-3 py-1.5 text-xs font-semibold text-coffee-soft hover:bg-orange-soft hover:text-orange-dark"
-            >
-              {s}
-            </button>
+        <p className="text-xs text-coffee-soft">
+          Lance item por item, com o valor de cada um — é assim que dá pra calcular depois o
+          custo de cada lanche (a chamada &ldquo;ficha técnica&rdquo;).
+        </p>
+        <div className="flex flex-col gap-2">
+          {EXPENSE_SUGGESTION_GROUPS.map((group) => (
+            <div key={group.label} className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-coffee-soft/70">
+                {group.label}:
+              </span>
+              {group.items.map((item) => (
+                <button
+                  key={item}
+                  onClick={() => setExpenseDesc(item)}
+                  className="rounded-full bg-cream-soft px-3 py-1.5 text-xs font-semibold text-coffee-soft hover:bg-orange-soft hover:text-orange-dark"
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
           ))}
         </div>
         <div className="flex flex-col gap-2 rounded-xl bg-cream-soft p-3 sm:flex-row sm:items-end">
