@@ -28,6 +28,8 @@ type SessionStop = {
   delivered_at: string | null;
   payment_method_original: PaymentMethod | null;
   payment_method_confirmed: PaymentMethod | null;
+  lat: number | null;
+  lng: number | null;
 };
 
 const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
@@ -35,6 +37,12 @@ const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   card: "Cartão",
   cash: "Dinheiro",
 };
+
+// Formato oficial de deep link do Waze (developers.google.com/waze/deeplinks):
+// abre o app já navegando até a coordenada, sem precisar digitar o endereço.
+function wazeUrl(lat: number, lng: number): string {
+  return `https://waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
+}
 
 function getDeviceId(): string {
   try {
@@ -406,7 +414,23 @@ export function CourierTrackingScreen({ token }: { token: string }) {
                 {s.delivered_at ? "✓" : s.stop_index}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-white">{s.customer_name}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="truncate text-sm font-bold text-white">{s.customer_name}</p>
+                  {s.lat !== null && s.lng !== null && (
+                    <a
+                      href={wazeUrl(s.lat, s.lng)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/15"
+                      aria-label="Abrir no Waze"
+                      title="Abrir no Waze"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7ab7ff" strokeWidth="2">
+                        <path d="M12 2C7 2 3 6 3 11c0 5 6 10 9 11 3-1 9-6 9-11 0-5-4-9-9-9Z" strokeLinejoin="round" />
+                        <circle cx="12" cy="11" r="2.5" fill="#7ab7ff" stroke="none" />
+                      </svg>
+                    </a>
+                  )}
+                </div>
                 <p className="truncate text-xs text-white/60">{s.address}</p>
                 {s.items && <p className="truncate text-xs text-white/50">{s.items}</p>}
                 {s.delivered_at ? (
