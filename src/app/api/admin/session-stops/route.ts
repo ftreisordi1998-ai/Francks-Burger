@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
       orderId: string | null;
       customerName: string;
       whatsapp: string | null;
+      paymentMethod: string | null;
       address: string;
       items: string;
       lat: number;
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
     order_id: s.orderId,
     customer_name: s.customerName,
     whatsapp: s.whatsapp,
+    payment_method_original: s.paymentMethod,
     address: s.address,
     items: s.items,
     lat: s.lat,

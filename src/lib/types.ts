@@ -55,6 +55,7 @@ export interface FinanceIncome {
   description: string;
   amount_cents: number;
   payment_method: FinancePaymentMethod;
+  order_id: string | null;
   created_at: string;
 }
 
@@ -70,6 +71,16 @@ export interface OrderIncomeRow {
   customer_name: string;
   total_cents: number;
   payment_method: PaymentMethod;
+  created_at: string;
+}
+
+export interface PendingOrderRow {
+  id: string;
+  customer_name: string;
+  total_cents: number;
+  payment_method: PaymentMethod;
+  window_id: string | null;
+  window_label_snapshot: string;
   created_at: string;
 }
 
@@ -178,6 +189,7 @@ export interface RouteOrderRow {
   id: string;
   customer_name: string;
   whatsapp: string;
+  payment_method: PaymentMethod;
   address_street: string | null;
   address_number: string | null;
   address_complement: string | null;
@@ -219,7 +231,14 @@ export interface RouteStop {
   lat: number;
   lng: number;
   addressLabel: string;
-  orders: { id: string; customerName: string; whatsapp: string; items: string; address: string }[];
+  orders: {
+    id: string;
+    customerName: string;
+    whatsapp: string;
+    paymentMethod: PaymentMethod;
+    items: string;
+    address: string;
+  }[];
   etaIso: string | null;
   legGeometry: { type: "LineString"; coordinates: [number, number][] } | null;
 }
@@ -263,6 +282,8 @@ export interface DeliverySessionStop {
   lat: number | null;
   lng: number | null;
   delivered_at: string | null;
+  payment_method_original: PaymentMethod | null;
+  payment_method_confirmed: PaymentMethod | null;
   created_at: string;
 }
 

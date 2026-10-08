@@ -120,6 +120,7 @@ export function RoutePlannerScreen({
 
   const [avoidPoints, setAvoidPoints] = useState<RouteAvoidPoint[]>([]);
   const [pickingAvoidPoint, setPickingAvoidPoint] = useState(false);
+  const [showAvoidPointsPanel, setShowAvoidPointsPanel] = useState(false);
   const pickingAvoidRef = useRef(false);
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -276,7 +277,28 @@ export function RoutePlannerScreen({
     }
   }, [deliverySession]);
 
-  async function createTrackingLink() {
+  async function persistSessionStops(sessionId: string, plan: RoutePlanResult) {
+    await fetch("/api/admin/session-stops", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        stops: plan.stops.map((s) => ({
+          stopIndex: s.stopIndex,
+          orderId: s.orders[0]?.id ?? null,
+          customerName: s.orders.map((o) => o.customerName).join(" + "),
+          whatsapp: s.orders[0]?.whatsapp ?? null,
+          paymentMethod: s.orders[0]?.paymentMethod ?? null,
+          address: s.orders[0]?.address ?? s.addressLabel,
+          items: s.orders.map((o) => o.items).join(" | "),
+          lat: s.lat,
+          lng: s.lng,
+        })),
+      }),
+    });
+  }
+
+  async function createTrackingLink(plan?: RoutePlanResult) {
     setCreatingSession(true);
     const supabase = createClient();
     const { data, error } = await supabase.rpc("admin_create_delivery_session", {
@@ -304,26 +326,21 @@ export function RoutePlannerScreen({
       // Salva a lista de paradas (nomes, endereços, itens) junto do link de
       // rastreamento, pra o motoboy ver a rota completa com ordem e nomes no
       // celular dele e poder marcar cada entrega como feita.
-      if (routeResult) {
-        await fetch("/api/admin/session-stops", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId: data.id,
-            stops: routeResult.stops.map((s) => ({
-              stopIndex: s.stopIndex,
-              orderId: s.orders[0]?.id ?? null,
-              customerName: s.orders.map((o) => o.customerName).join(" + "),
-              whatsapp: s.orders[0]?.whatsapp ?? null,
-              address: s.orders[0]?.address ?? s.addressLabel,
-              items: s.orders.map((o) => o.items).join(" | "),
-              lat: s.lat,
-              lng: s.lng,
-            })),
-          }),
-        });
-      }
+      const planToPersist = plan ?? routeResult;
+      if (planToPersist) await persistSessionStops(data.id, planToPersist);
     }
+  }
+
+  // Sempre que uma rota nova é gerada enquanto já existe um link ativo pro
+  // motoboy, aquele link antigo é encerrado e um novo é criado na hora — o
+  // link que já tinha sido enviado passa a mostrar "entrega finalizada" e
+  // deixa de aceitar GPS, então precisa de fato trocar de link, não só
+  // atualizar a lista por baixo dele.
+  async function refreshTrackingLinkIfNeeded(plan: RoutePlanResult) {
+    if (!deliverySession || deliverySession.status === "ended") return;
+    const supabase = createClient();
+    await supabase.rpc("end_delivery_session", { p_token: deliverySession.token });
+    await createTrackingLink(plan);
   }
 
   useEffect(() => {
@@ -731,6 +748,7 @@ export function RoutePlannerScreen({
         return failed ? { ...o, address_geocode_status: failed.reason } : o;
       })
     );
+    await refreshTrackingLinkIfNeeded(data);
   }
 
   const problematicOrders = useMemo(
@@ -890,41 +908,6 @@ export function RoutePlannerScreen({
         </label>
       </section>
 
-      <section className="flex flex-col gap-3 rounded-2xl bg-white p-4">
-        <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">
-          Ruas a evitar
-        </h2>
-        <p className="text-sm text-coffee-soft">
-          Marque no mapa trechos de rua esburacados ou errados no mapa — a rota nunca mais vai
-          passar por ali.
-        </p>
-        {avoidPoints.length > 0 && (
-          <ul className="flex flex-col gap-1.5">
-            {avoidPoints.map((p, i) => (
-              <li
-                key={p.id}
-                className="flex items-center justify-between rounded-lg border border-coffee/10 px-3 py-2 text-sm"
-              >
-                <span className="text-coffee-soft">
-                  Ponto {i + 1} · {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
-                </span>
-                <button onClick={() => removeAvoidPoint(p.id)} className="text-xs font-bold text-danger">
-                  Remover
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <button
-          onClick={() => setPickingAvoidPoint((v) => !v)}
-          className={`min-h-11 self-start rounded-xl px-4 text-sm font-bold ${
-            pickingAvoidPoint ? "bg-danger-bg text-danger" : "bg-cream-soft text-coffee-soft"
-          }`}
-        >
-          {pickingAvoidPoint ? "Toque no mapa pra marcar (toque aqui pra cancelar)" : "Marcar rua no mapa"}
-        </button>
-      </section>
-
       {selectedWindowId && (
         <section className="flex flex-col gap-2 rounded-2xl bg-white p-4">
           <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">
@@ -933,7 +916,7 @@ export function RoutePlannerScreen({
           {!deliverySession ? (
             <div className="flex flex-col gap-1.5">
               <button
-                onClick={createTrackingLink}
+                onClick={() => createTrackingLink()}
                 disabled={creatingSession || !hasRoute}
                 className="min-h-11 self-start rounded-xl bg-orange px-4 text-sm font-bold text-white disabled:opacity-50"
               >
@@ -991,6 +974,51 @@ export function RoutePlannerScreen({
           )}
         </section>
       )}
+
+      <section className="flex flex-col gap-3 rounded-2xl bg-white p-4">
+        <button
+          onClick={() => setShowAvoidPointsPanel((v) => !v)}
+          className="flex items-center justify-between gap-2 text-left"
+        >
+          <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">
+            Ruas a evitar {avoidPoints.length > 0 && `(${avoidPoints.length})`}
+          </h2>
+          <span className="text-coffee-soft">{showAvoidPointsPanel ? "▾" : "▸"}</span>
+        </button>
+        {showAvoidPointsPanel && (
+          <>
+            <p className="text-sm text-coffee-soft">
+              Marque no mapa trechos de rua esburacados ou errados no mapa — a rota nunca mais vai
+              passar por ali.
+            </p>
+            {avoidPoints.length > 0 && (
+              <ul className="flex flex-col gap-1.5">
+                {avoidPoints.map((p, i) => (
+                  <li
+                    key={p.id}
+                    className="flex items-center justify-between rounded-lg border border-coffee/10 px-3 py-2 text-sm"
+                  >
+                    <span className="text-coffee-soft">
+                      Ponto {i + 1} · {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
+                    </span>
+                    <button onClick={() => removeAvoidPoint(p.id)} className="text-xs font-bold text-danger">
+                      Remover
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button
+              onClick={() => setPickingAvoidPoint((v) => !v)}
+              className={`min-h-11 self-start rounded-xl px-4 text-sm font-bold ${
+                pickingAvoidPoint ? "bg-danger-bg text-danger" : "bg-cream-soft text-coffee-soft"
+              }`}
+            >
+              {pickingAvoidPoint ? "Toque no mapa pra marcar (toque aqui pra cancelar)" : "Marcar rua no mapa"}
+            </button>
+          </>
+        )}
+      </section>
 
       {problematicOrders.length > 0 && (
         <section className="flex flex-col gap-2 rounded-2xl bg-white p-4">

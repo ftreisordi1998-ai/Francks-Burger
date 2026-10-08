@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-guard";
 import { drivingDirections, drivingMatrix, geocodeAddress, MAPBOX_MAX_COORDINATES } from "@/lib/mapbox";
 import { solveRouteOrder } from "@/lib/route-optimize";
-import type { GeocodeStatus, RouteOrderRow, RouteStop } from "@/lib/types";
+import type { GeocodeStatus, PaymentMethod, RouteOrderRow, RouteStop } from "@/lib/types";
 
 const GEOCODE_RELEVANCE_THRESHOLD = 0.7;
 
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
   const { data: ordersData, error: ordersError } = await supabase
     .from("orders")
     .select(
-      "id, customer_name, whatsapp, address_street, address_number, address_complement, address_reference, neighborhood_name_snapshot, address_lat, address_lng, address_geocode_status, order_items(product_name_snapshot, qty)"
+      "id, customer_name, whatsapp, payment_method, address_street, address_number, address_complement, address_reference, neighborhood_name_snapshot, address_lat, address_lng, address_geocode_status, order_items(product_name_snapshot, qty)"
     )
     .in("id", orderIds);
   if (ordersError) return NextResponse.json({ error: ordersError.message }, { status: 400 });
@@ -129,7 +129,14 @@ export async function POST(req: NextRequest) {
     {
       lat: number;
       lng: number;
-      orders: { id: string; customerName: string; whatsapp: string; items: string; address: string }[];
+      orders: {
+        id: string;
+        customerName: string;
+        whatsapp: string;
+        paymentMethod: PaymentMethod;
+        items: string;
+        address: string;
+      }[];
     }
   >();
   for (const o of routable) {
@@ -141,9 +148,14 @@ export async function POST(req: NextRequest) {
     if (!groups.has(key)) {
       groups.set(key, { lat, lng, orders: [] });
     }
-    groups
-      .get(key)!
-      .orders.push({ id: o.id, customerName: o.customer_name, whatsapp: o.whatsapp, items: itemsLabel, address });
+    groups.get(key)!.orders.push({
+      id: o.id,
+      customerName: o.customer_name,
+      whatsapp: o.whatsapp,
+      paymentMethod: o.payment_method,
+      items: itemsLabel,
+      address,
+    });
   }
   const stopGroups = [...groups.values()];
 

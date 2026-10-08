@@ -7,13 +7,22 @@ import { createClient } from "@/lib/supabase/client";
 import { formatCents, formatDateTime } from "@/lib/format";
 import { FINANCE_EXPENSE_STATUS_LABEL, FINANCE_PAYMENT_METHOD_LABEL, PAYMENT_METHOD_LABEL } from "@/lib/status";
 import type {
+  DeliveryWindow,
   EditionOption,
   FinanceExpense,
   FinanceExpenseStatus,
   FinanceIncome,
   FinancePaymentMethod,
   OrderIncomeRow,
+  PaymentMethod,
+  PendingOrderRow,
 } from "@/lib/types";
+
+const PAYMENT_METHOD_TO_FINANCE: Record<PaymentMethod, FinancePaymentMethod> = {
+  pix: "pix",
+  card: "cartao",
+  cash: "dinheiro",
+};
 
 const EXPENSE_SUGGESTION_GROUPS: { label: string; items: string[] }[] = [
   {
@@ -67,6 +76,9 @@ export function FinanceiroScreen({
   expenses: initialExpenses,
   orderIncomes,
   openAmountCents,
+  windows,
+  pendingOrders,
+  confirmedPaymentByOrderId,
 }: {
   editions: EditionOption[];
   selectedEditionId: string;
@@ -76,6 +88,9 @@ export function FinanceiroScreen({
   expenses: FinanceExpense[];
   orderIncomes: OrderIncomeRow[];
   openAmountCents: number;
+  windows: DeliveryWindow[];
+  pendingOrders: PendingOrderRow[];
+  confirmedPaymentByOrderId: Record<string, string>;
 }) {
   const router = useRouter();
   const { confirmDialog, alertDialog } = useDialog();
@@ -89,6 +104,33 @@ export function FinanceiroScreen({
   const [incomeAmount, setIncomeAmount] = useState("");
   const [incomeMethod, setIncomeMethod] = useState<FinancePaymentMethod>("pix");
   const [savingIncome, setSavingIncome] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [openWindowId, setOpenWindowId] = useState<string | null>(null);
+
+  const registeredOrderIds = useMemo(
+    () => new Set(incomes.map((i) => i.order_id).filter((id): id is string => Boolean(id))),
+    [incomes]
+  );
+
+  const pendingByWindow = useMemo(() => {
+    const map = new Map<string, PendingOrderRow[]>();
+    for (const order of pendingOrders) {
+      if (registeredOrderIds.has(order.id)) continue;
+      const key = order.window_id ?? "sem-janela";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(order);
+    }
+    return map;
+  }, [pendingOrders, registeredOrderIds]);
+
+  function pickOrderForIncome(order: PendingOrderRow) {
+    setSelectedOrderId(order.id);
+    setIncomeDesc(order.customer_name);
+    setIncomeAmount(centsToInput(order.total_cents));
+    const confirmed = confirmedPaymentByOrderId[order.id];
+    const method = (confirmed as PaymentMethod | undefined) ?? order.payment_method;
+    setIncomeMethod(PAYMENT_METHOD_TO_FINANCE[method] ?? "pix");
+  }
 
   const [expenses, setExpenses] = useState(initialExpenses);
   const [expenseDesc, setExpenseDesc] = useState("");
@@ -127,6 +169,7 @@ export function FinanceiroScreen({
         description: incomeDesc.trim(),
         amount_cents,
         payment_method: incomeMethod,
+        order_id: selectedOrderId,
       })
       .select("*")
       .single();
@@ -135,6 +178,7 @@ export function FinanceiroScreen({
       setIncomes((prev) => [data as FinanceIncome, ...prev]);
       setIncomeDesc("");
       setIncomeAmount("");
+      setSelectedOrderId(null);
     }
   }
 
@@ -404,6 +448,69 @@ export function FinanceiroScreen({
           Pedidos pagos pelo site entram aqui automaticamente. Use o formulário abaixo só para
           dinheiro recebido fora do site (ex.: venda direta, gorjeta).
         </p>
+
+        {windows.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {windows.map((w) => {
+              const windowPending = pendingByWindow.get(w.id) ?? [];
+              const isOpen = openWindowId === w.id;
+              return (
+                <div key={w.id} className="overflow-hidden rounded-xl border border-coffee/10">
+                  <button
+                    onClick={() => setOpenWindowId(isOpen ? null : w.id)}
+                    className="flex w-full items-center justify-between gap-2 bg-cream-soft px-3 py-2.5 text-left"
+                  >
+                    <span className="text-sm font-bold text-coffee">{w.label}</span>
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                          windowPending.length > 0 ? "bg-warning-bg text-warning" : "bg-success-bg text-success"
+                        }`}
+                      >
+                        {windowPending.length > 0
+                          ? `${windowPending.length} a receber`
+                          : "Tudo registrado"}
+                      </span>
+                      <span className="text-coffee-soft">{isOpen ? "▾" : "▸"}</span>
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <div className="flex flex-col gap-1 p-2">
+                      {windowPending.length === 0 ? (
+                        <p className="px-2 py-1 text-xs text-coffee-soft">
+                          Nenhum pedido pendente nessa janela.
+                        </p>
+                      ) : (
+                        windowPending.map((order) => {
+                          const confirmed = confirmedPaymentByOrderId[order.id] as PaymentMethod | undefined;
+                          return (
+                            <button
+                              key={order.id}
+                              onClick={() => pickOrderForIncome(order)}
+                              className={`flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                                selectedOrderId === order.id ? "bg-orange-soft/40" : "hover:bg-cream-soft"
+                              }`}
+                            >
+                              <div>
+                                <p className="font-bold text-coffee">{order.customer_name}</p>
+                                <p className="text-xs text-coffee-soft">
+                                  {PAYMENT_METHOD_LABEL[confirmed ?? order.payment_method]}
+                                  {confirmed && confirmed !== order.payment_method && " · confirmado pelo motoboy"}
+                                </p>
+                              </div>
+                              <span className="font-bold text-coffee">{formatCents(order.total_cents)}</span>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         <div className="flex flex-col gap-2 rounded-xl bg-cream-soft p-3 sm:flex-row sm:items-end">
           <div className="flex flex-1 flex-col gap-1">
             <label className="text-xs font-bold text-coffee-soft">Descrição</label>

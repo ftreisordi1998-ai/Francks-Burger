@@ -17,6 +17,8 @@ type QueuedPosition = {
   capturedAt: number;
 };
 
+type PaymentMethod = "pix" | "card" | "cash";
+
 type SessionStop = {
   stop_index: number;
   customer_name: string;
@@ -24,6 +26,14 @@ type SessionStop = {
   address: string | null;
   items: string | null;
   delivered_at: string | null;
+  payment_method_original: PaymentMethod | null;
+  payment_method_confirmed: PaymentMethod | null;
+};
+
+const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+  pix: "Pix",
+  card: "Cartão",
+  cash: "Dinheiro",
 };
 
 function getDeviceId(): string {
@@ -78,6 +88,7 @@ export function CourierTrackingScreen({ token }: { token: string }) {
   const [queuedCount, setQueuedCount] = useState(0);
   const [stops, setStops] = useState<SessionStop[]>([]);
   const [markingStop, setMarkingStop] = useState<number | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState<Record<number, PaymentMethod>>({});
   const watchIdRef = useRef<number | null>(null);
   const lastUpdateRef = useRef(0);
   const deviceIdRef = useRef<string>("");
@@ -147,13 +158,23 @@ export function CourierTrackingScreen({ token }: { token: string }) {
   }, [token]);
 
   async function markDelivered(stopIndex: number) {
+    const stop = stops.find((s) => s.stop_index === stopIndex);
+    const method = selectedMethod[stopIndex] ?? stop?.payment_method_original ?? null;
     setMarkingStop(stopIndex);
     const supabase = createClient();
-    const { error } = await supabase.rpc("mark_stop_delivered", { p_token: token, p_stop_index: stopIndex });
+    const { error } = await supabase.rpc("mark_stop_delivered", {
+      p_token: token,
+      p_stop_index: stopIndex,
+      p_payment_method: method,
+    });
     setMarkingStop(null);
     if (!error) {
       setStops((prev) =>
-        prev.map((s) => (s.stop_index === stopIndex ? { ...s, delivered_at: new Date().toISOString() } : s))
+        prev.map((s) =>
+          s.stop_index === stopIndex
+            ? { ...s, delivered_at: new Date().toISOString(), payment_method_confirmed: method }
+            : s
+        )
       );
     }
   }
@@ -388,6 +409,26 @@ export function CourierTrackingScreen({ token }: { token: string }) {
                 <p className="truncate text-sm font-bold text-white">{s.customer_name}</p>
                 <p className="truncate text-xs text-white/60">{s.address}</p>
                 {s.items && <p className="truncate text-xs text-white/50">{s.items}</p>}
+                {s.delivered_at ? (
+                  s.payment_method_confirmed && (
+                    <p className="mt-1 text-xs text-success">
+                      Recebido em {PAYMENT_METHOD_LABEL[s.payment_method_confirmed]}
+                    </p>
+                  )
+                ) : (
+                  <select
+                    value={selectedMethod[s.stop_index] ?? s.payment_method_original ?? "pix"}
+                    onChange={(e) =>
+                      setSelectedMethod((prev) => ({ ...prev, [s.stop_index]: e.target.value as PaymentMethod }))
+                    }
+                    className="mt-1.5 min-h-8 rounded-lg border border-white/20 bg-white/10 px-2 text-xs font-semibold text-white"
+                    style={{ fontSize: 14 }}
+                  >
+                    <option className="text-coffee" value="pix">Pix</option>
+                    <option className="text-coffee" value="card">Cartão</option>
+                    <option className="text-coffee" value="cash">Dinheiro</option>
+                  </select>
+                )}
               </div>
               {!s.delivered_at && (
                 <button
