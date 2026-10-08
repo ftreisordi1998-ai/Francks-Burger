@@ -393,6 +393,41 @@ export function RoutePlannerScreen({
         }
       }
 
+      // Trecho de volta (depois da última parada até a cozinha) em estilo
+      // diferente — tracejado e mais escuro — pra ficar claro no mapa que é
+      // o caminho de retorno, não uma rota duplicada por cima da de ida.
+      const returnSourceId = "route-return-line";
+      if (routeResult!.returnGeometry) {
+        const geojson = { type: "Feature" as const, properties: {}, geometry: routeResult!.returnGeometry };
+        const existing = map.getSource(returnSourceId) as maplibregl.GeoJSONSource | undefined;
+        if (existing) {
+          existing.setData(geojson);
+        } else {
+          map.addSource(returnSourceId, { type: "geojson", data: geojson });
+          map.addLayer({
+            id: "route-return-line-halo",
+            type: "line",
+            source: returnSourceId,
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.9 },
+          });
+          map.addLayer({
+            id: "route-return-line",
+            type: "line",
+            source: returnSourceId,
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: {
+              "line-color": "#5b4636",
+              "line-width": 4,
+              "line-dasharray": [0.1, 1.8],
+            },
+          });
+        }
+      } else {
+        const existing = map.getSource(returnSourceId) as maplibregl.GeoJSONSource | undefined;
+        if (existing) existing.setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } });
+      }
+
       if (!bounds.isEmpty()) {
         lastBoundsRef.current = bounds;
         map.fitBounds(bounds, {
@@ -781,6 +816,12 @@ export function RoutePlannerScreen({
             <div className="flex flex-wrap items-center gap-4 border-b border-cream-soft px-4 py-3 text-sm font-bold text-coffee">
               <span>{formatDistance(routeResult.totalDistanceMeters)}</span>
               <span>{formatDuration(routeResult.totalDurationSeconds)}</span>
+              {routeResult.returnGeometry && (
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-coffee/60">
+                  <span className="inline-block h-0 w-4 border-t-2 border-dashed border-[#5b4636]" />
+                  Volta
+                </span>
+              )}
             </div>
           )}
           <div className={`grid grid-cols-1 ${hasRoute ? "lg:grid-cols-[1fr_300px]" : ""}`}>

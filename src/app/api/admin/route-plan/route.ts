@@ -164,14 +164,34 @@ export async function POST(req: NextRequest) {
   const solvedOrder = solveRouteOrder(matrix.durations, roundTrip);
 
   const orderedPoints = solvedOrder.map((idx) => points[idx]);
-  const directionsPoints = roundTrip ? [...orderedPoints, points[0]] : orderedPoints;
 
+  // Pede a geometria de ida e a de volta em chamadas separadas (em vez de uma
+  // única rota cozinha→paradas→cozinha) pra poder desenhar a volta com um
+  // estilo diferente no mapa — e pra não arriscar a Directions API "enrolar"
+  // o traçado tentando achar um jeito de voltar sem passar de novo pelas
+  // mesmas ruas de mão única.
   let directionsResult;
   try {
-    directionsResult = await drivingDirections(directionsPoints);
+    directionsResult = await drivingDirections(orderedPoints);
   } catch (err) {
     const message = err instanceof Error ? err.message : "DIRECTIONS_REQUEST_FAILED";
     return NextResponse.json({ error: message }, { status: 502 });
+  }
+
+  let returnGeometry: { type: "LineString"; coordinates: [number, number][] } | null = null;
+  let returnDistanceMeters = 0;
+  let returnDurationSeconds = 0;
+  if (roundTrip && orderedPoints.length > 0) {
+    const lastStop = orderedPoints[orderedPoints.length - 1];
+    try {
+      const returnResult = await drivingDirections([lastStop, points[0]]);
+      returnGeometry = returnResult.geometry;
+      returnDistanceMeters = returnResult.distanceMeters;
+      returnDurationSeconds = returnResult.durationSeconds;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "DIRECTIONS_REQUEST_FAILED";
+      return NextResponse.json({ error: message }, { status: 502 });
+    }
   }
 
   // Horário estimado de cada parada = partida + soma da duração real (pela
@@ -201,8 +221,9 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     stops,
     geometry: directionsResult.geometry,
-    totalDistanceMeters: directionsResult.distanceMeters,
-    totalDurationSeconds: directionsResult.durationSeconds,
+    returnGeometry,
+    totalDistanceMeters: directionsResult.distanceMeters + returnDistanceMeters,
+    totalDurationSeconds: directionsResult.durationSeconds + returnDurationSeconds,
     failedOrders,
     departureIso,
   });

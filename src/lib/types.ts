@@ -218,6 +218,7 @@ export interface RouteStop {
 export interface RoutePlanResult {
   stops: RouteStop[];
   geometry: { type: "LineString"; coordinates: [number, number][] } | null;
+  returnGeometry: { type: "LineString"; coordinates: [number, number][] } | null;
   totalDistanceMeters: number;
   totalDurationSeconds: number;
   failedOrders: { id: string; customerName: string; reason: GeocodeStatus }[];
