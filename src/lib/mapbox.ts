@@ -43,10 +43,15 @@ function excludeParam(avoidPoints?: { lat: number; lng: number }[]): string {
 }
 
 /** Matriz de distância/tempo real pelas ruas entre todos os pontos (índice 0 =
- * cozinha). Nunca usa linha reta. */
+ * cozinha). Nunca usa linha reta.
+ *
+ * A Matrix API do Mapbox NÃO aceita o parâmetro "exclude" (confirmado via a
+ * própria API: qualquer exclude, mesmo com um só ponto, retorna "Request too
+ * large for custom parameters [exclude]") — só a Directions API aceita. Por
+ * isso os pontos a evitar não entram aqui, só em drivingDirections.
+ */
 export async function drivingMatrix(
-  points: { lat: number; lng: number }[],
-  avoidPoints?: { lat: number; lng: number }[]
+  points: { lat: number; lng: number }[]
 ): Promise<{ distances: number[][]; durations: number[][] }> {
   const token = requireToken();
   if (points.length > MAPBOX_MAX_COORDINATES) {
@@ -55,7 +60,7 @@ export async function drivingMatrix(
   const coords = points.map((p) => `${p.lng},${p.lat}`).join(";");
   const url =
     `https://api.mapbox.com/directions-matrix/v1/mapbox/driving/${coords}` +
-    `?annotations=distance,duration&access_token=${token}${excludeParam(avoidPoints)}`;
+    `?annotations=distance,duration&access_token=${token}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("MATRIX_REQUEST_FAILED");
   const data = await res.json();

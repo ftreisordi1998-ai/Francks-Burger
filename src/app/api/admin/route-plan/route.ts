@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
 
   let matrix: { distances: number[][]; durations: number[][] };
   try {
-    matrix = await drivingMatrix(points, avoidPoints);
+    matrix = await drivingMatrix(points);
   } catch (err) {
     const message = err instanceof Error ? err.message : "MATRIX_REQUEST_FAILED";
     return NextResponse.json({ error: message }, { status: 502 });
