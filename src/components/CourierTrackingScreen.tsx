@@ -4,15 +4,36 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 const MIN_UPDATE_INTERVAL_MS = 4000;
+const DEVICE_ID_KEY = "francksburger.courier.deviceId";
 
-type Phase = "loading" | "invalid" | "idle" | "active" | "ended" | "error";
+type Phase = "loading" | "invalid" | "idle" | "active" | "ended" | "error" | "locked";
+
+function getDeviceId(): string {
+  try {
+    const existing = localStorage.getItem(DEVICE_ID_KEY);
+    if (existing) return existing;
+    const fresh = crypto.randomUUID();
+    localStorage.setItem(DEVICE_ID_KEY, fresh);
+    return fresh;
+  } catch {
+    // Navegador sem localStorage (modo privado restrito) — ainda funciona,
+    // só perde a trava de "mesmo aparelho continua liberado" ao recarregar.
+    return crypto.randomUUID();
+  }
+}
 
 export function CourierTrackingScreen({ token }: { token: string }) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastSentAt, setLastSentAt] = useState<number | null>(null);
+  const [weakSignal, setWeakSignal] = useState(false);
   const watchIdRef = useRef<number | null>(null);
   const lastUpdateRef = useRef(0);
+  const deviceIdRef = useRef<string>("");
+
+  useEffect(() => {
+    deviceIdRef.current = getDeviceId();
+  }, []);
 
   useEffect(() => {
     async function checkSession() {
@@ -42,16 +63,25 @@ export function CourierTrackingScreen({ token }: { token: string }) {
       return;
     }
     const supabase = createClient();
-    const { error } = await supabase.rpc("start_delivery_session", { p_token: token });
+    const { error } = await supabase.rpc("start_delivery_session", {
+      p_token: token,
+      p_device_id: deviceIdRef.current,
+    });
     if (error) {
-      setErrorMessage("Não foi possível iniciar — peça um novo link.");
-      setPhase("error");
+      if (error.message === "ALREADY_ACTIVE_ELSEWHERE") {
+        setPhase("locked");
+      } else {
+        setErrorMessage("Não foi possível iniciar — peça um novo link.");
+        setPhase("error");
+      }
       return;
     }
 
     setPhase("active");
+    setWeakSignal(false);
     watchIdRef.current = navigator.geolocation.watchPosition(
       async (pos) => {
+        setWeakSignal(false);
         const now = Date.now();
         if (now - lastUpdateRef.current < MIN_UPDATE_INTERVAL_MS) return;
         lastUpdateRef.current = now;
@@ -64,12 +94,21 @@ export function CourierTrackingScreen({ token }: { token: string }) {
         });
         setLastSentAt(now);
       },
-      () => {
-        setErrorMessage("Não foi possível acessar sua localização. Permita o acesso e tente de novo.");
-        setPhase("error");
-        stopWatching();
+      (err) => {
+        // Sinal fraco ou demora momentânea (comum logo no início, "cold start"
+        // do GPS, ou passando por um túnel/prédio) não deve derrubar o
+        // rastreamento — o navegador continua tentando sozinho em segundo
+        // plano. Só paramos de vez se o problema for falta de permissão, que
+        // aí sim não tem como se resolver sozinho.
+        if (err.code === err.PERMISSION_DENIED) {
+          setErrorMessage("Não foi possível acessar sua localização. Permita o acesso e tente de novo.");
+          setPhase("error");
+          stopWatching();
+          return;
+        }
+        setWeakSignal(true);
       },
-      { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 25000 }
     );
   }
 
@@ -99,6 +138,21 @@ export function CourierTrackingScreen({ token }: { token: string }) {
         </p>
       )}
 
+      {phase === "locked" && (
+        <div className="flex flex-col items-center gap-4">
+          <p className="max-w-xs text-sm text-white/80">
+            Essa entrega já está sendo rastreada em outro aparelho agora. Só dá pra usar um por
+            vez — peça pra quem está com ela aberta finalizar primeiro, ou peça um link novo.
+          </p>
+          <button
+            onClick={() => setPhase("idle")}
+            className="min-h-11 rounded-full bg-white/10 px-6 text-sm font-bold text-white"
+          >
+            Voltar
+          </button>
+        </div>
+      )}
+
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-5">
           <p className="max-w-xs text-sm text-white/80">
@@ -117,16 +171,31 @@ export function CourierTrackingScreen({ token }: { token: string }) {
       {phase === "active" && (
         <div className="flex flex-col items-center gap-5">
           <div className="relative flex h-24 w-24 items-center justify-center">
-            <span className="absolute h-full w-full animate-ping rounded-full bg-success/40" />
-            <span className="absolute h-16 w-16 animate-ping rounded-full bg-success/50 [animation-delay:200ms]" />
-            <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-success text-2xl">
+            {!weakSignal && (
+              <>
+                <span className="absolute h-full w-full animate-ping rounded-full bg-success/40" />
+                <span className="absolute h-16 w-16 animate-ping rounded-full bg-success/50 [animation-delay:200ms]" />
+              </>
+            )}
+            <span
+              className={`relative flex h-14 w-14 items-center justify-center rounded-full text-2xl ${
+                weakSignal ? "bg-warning" : "bg-success"
+              }`}
+            >
               🛵
             </span>
           </div>
           <div>
-            <p className="text-base font-extrabold text-white">Transmitindo localização…</p>
+            <p className="text-base font-extrabold text-white">
+              {weakSignal ? "Buscando sinal de GPS…" : "Transmitindo localização…"}
+            </p>
             <p className="mt-0.5 text-xs text-white/60">
-              {lastSentAt ? "Atualizado agora" : "Aguardando sinal de GPS…"}
+              {lastSentAt
+                ? `Última atualização: ${new Date(lastSentAt).toLocaleTimeString("pt-BR")}`
+                : "Aguardando primeiro sinal…"}
+            </p>
+            <p className="mt-2 max-w-[220px] text-xs text-white/50">
+              Mantenha essa aba aberta e a tela do celular ligada durante a entrega.
             </p>
           </div>
           <button

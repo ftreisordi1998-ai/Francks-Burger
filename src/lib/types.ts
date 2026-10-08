@@ -239,6 +239,7 @@ export interface DeliverySession {
   ended_at: string | null;
   updated_at: string;
   created_at: string;
+  active_device_id: string | null;
 }
 
 export interface ActiveDeliveryPosition {

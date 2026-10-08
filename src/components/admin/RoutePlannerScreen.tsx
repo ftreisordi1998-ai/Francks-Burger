@@ -208,6 +208,7 @@ export function RoutePlannerScreen({
         ended_at: null,
         updated_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
+        active_device_id: null,
       });
     }
   }
