@@ -44,6 +44,9 @@ export async function POST(req: NextRequest) {
     departureIso = window?.starts_at ?? null;
   }
 
+  const { data: avoidPointsData } = await supabase.from("route_avoid_points").select("lat, lng");
+  const avoidPoints = (avoidPointsData ?? []).map((p) => ({ lat: p.lat, lng: p.lng }));
+
   const { data: kitchen } = await supabase
     .from("kitchen_location")
     .select("*")
@@ -155,7 +158,7 @@ export async function POST(req: NextRequest) {
 
   let matrix: { distances: number[][]; durations: number[][] };
   try {
-    matrix = await drivingMatrix(points);
+    matrix = await drivingMatrix(points, avoidPoints);
   } catch (err) {
     const message = err instanceof Error ? err.message : "MATRIX_REQUEST_FAILED";
     return NextResponse.json({ error: message }, { status: 502 });
@@ -172,7 +175,7 @@ export async function POST(req: NextRequest) {
   // mesmas ruas de mão única.
   let directionsResult;
   try {
-    directionsResult = await drivingDirections(orderedPoints);
+    directionsResult = await drivingDirections(orderedPoints, avoidPoints);
   } catch (err) {
     const message = err instanceof Error ? err.message : "DIRECTIONS_REQUEST_FAILED";
     return NextResponse.json({ error: message }, { status: 502 });
@@ -184,7 +187,7 @@ export async function POST(req: NextRequest) {
   if (roundTrip && orderedPoints.length > 0) {
     const lastStop = orderedPoints[orderedPoints.length - 1];
     try {
-      const returnResult = await drivingDirections([lastStop, points[0]]);
+      const returnResult = await drivingDirections([lastStop, points[0]], avoidPoints);
       returnGeometry = returnResult.geometry;
       returnDistanceMeters = returnResult.distanceMeters;
       returnDurationSeconds = returnResult.durationSeconds;

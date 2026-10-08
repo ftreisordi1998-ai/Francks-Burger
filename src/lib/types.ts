@@ -189,6 +189,14 @@ export interface RouteOrderRow {
   order_items: { product_name_snapshot: string; qty: number }[];
 }
 
+export interface RouteAvoidPoint {
+  id: string;
+  lat: number;
+  lng: number;
+  label: string | null;
+  created_at: string;
+}
+
 export interface KitchenLocation {
   id: "default";
   address_street: string | null;

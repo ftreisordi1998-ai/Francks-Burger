@@ -31,10 +31,22 @@ export async function geocodeAddress(query: string): Promise<GeocodeCandidate[]>
   }));
 }
 
+// Mapbox aceita no máximo 50 pontos de exclusão por requisição (perfis
+// driving/driving-traffic), cada um "puxado" pra rua mais próxima e então
+// excluído do roteamento — é assim que marcamos uma rua específica (ex: rua
+// esburacada ou com dado de mapa errado) pra nunca ser usada.
+function excludeParam(avoidPoints?: { lat: number; lng: number }[]): string {
+  if (!avoidPoints || avoidPoints.length === 0) return "";
+  const capped = avoidPoints.slice(0, 50);
+  const points = capped.map((p) => `point(${p.lng} ${p.lat})`).join(",");
+  return `&exclude=${encodeURIComponent(points)}`;
+}
+
 /** Matriz de distância/tempo real pelas ruas entre todos os pontos (índice 0 =
  * cozinha). Nunca usa linha reta. */
 export async function drivingMatrix(
-  points: { lat: number; lng: number }[]
+  points: { lat: number; lng: number }[],
+  avoidPoints?: { lat: number; lng: number }[]
 ): Promise<{ distances: number[][]; durations: number[][] }> {
   const token = requireToken();
   if (points.length > MAPBOX_MAX_COORDINATES) {
@@ -43,7 +55,7 @@ export async function drivingMatrix(
   const coords = points.map((p) => `${p.lng},${p.lat}`).join(";");
   const url =
     `https://api.mapbox.com/directions-matrix/v1/mapbox/driving/${coords}` +
-    `?annotations=distance,duration&access_token=${token}`;
+    `?annotations=distance,duration&access_token=${token}${excludeParam(avoidPoints)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("MATRIX_REQUEST_FAILED");
   const data = await res.json();
@@ -53,7 +65,8 @@ export async function drivingMatrix(
 
 /** Geometria real da rota (pelas ruas) na ordem final das paradas. */
 export async function drivingDirections(
-  points: { lat: number; lng: number }[]
+  points: { lat: number; lng: number }[],
+  avoidPoints?: { lat: number; lng: number }[]
 ): Promise<{
   geometry: { type: "LineString"; coordinates: [number, number][] };
   distanceMeters: number;
@@ -66,7 +79,7 @@ export async function drivingDirections(
   const coords = points.map((p) => `${p.lng},${p.lat}`).join(";");
   const url =
     `https://api.mapbox.com/directions/v5/mapbox/driving/${coords}` +
-    `?geometries=geojson&overview=full&access_token=${token}`;
+    `?geometries=geojson&overview=full&access_token=${token}${excludeParam(avoidPoints)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("DIRECTIONS_REQUEST_FAILED");
   const data = await res.json();

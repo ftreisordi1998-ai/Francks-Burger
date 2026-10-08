@@ -11,6 +11,7 @@ import type {
   EditionOption,
   GeocodeStatus,
   KitchenLocation,
+  RouteAvoidPoint,
   RouteOrderRow,
   RoutePlanResult,
 } from "@/lib/types";
@@ -107,9 +108,14 @@ export function RoutePlannerScreen({
     { lat: number; lng: number; placeName: string; relevance: number }[]
   >([]);
 
+  const [avoidPoints, setAvoidPoints] = useState<RouteAvoidPoint[]>([]);
+  const [pickingAvoidPoint, setPickingAvoidPoint] = useState(false);
+  const pickingAvoidRef = useRef(false);
+
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const avoidMarkersRef = useRef<maplibregl.Marker[]>([]);
   const courierMarkerRef = useRef<maplibregl.Marker | null>(null);
   const lastBoundsRef = useRef<maplibregl.LngLatBounds | null>(null);
 
@@ -213,6 +219,41 @@ export function RoutePlannerScreen({
     }
   }
 
+  useEffect(() => {
+    pickingAvoidRef.current = pickingAvoidPoint;
+    const map = mapRef.current;
+    if (map) map.getCanvas().style.cursor = pickingAvoidPoint ? "crosshair" : "";
+  }, [pickingAvoidPoint]);
+
+  useEffect(() => {
+    async function loadAvoidPoints() {
+      const res = await fetch("/api/admin/avoid-points");
+      const data = await res.json();
+      setAvoidPoints(data.points ?? []);
+    }
+    loadAvoidPoints();
+  }, []);
+
+  async function addAvoidPoint(lat: number, lng: number) {
+    const res = await fetch("/api/admin/avoid-points", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat, lng }),
+    });
+    const data = await res.json();
+    if (data.point) setAvoidPoints((prev) => [...prev, data.point]);
+    setPickingAvoidPoint(false);
+  }
+
+  async function removeAvoidPoint(id: string) {
+    setAvoidPoints((prev) => prev.filter((p) => p.id !== id));
+    await fetch("/api/admin/avoid-points", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+  }
+
   async function fetchOrders(windowId: string, resetSelection: boolean) {
     if (!windowId) {
       setOrders([]);
@@ -292,7 +333,7 @@ export function RoutePlannerScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedWindowId, channelSuffix]);
 
-  const showMapSection = Boolean(deliverySession) || hasRoute;
+  const showMapSection = Boolean(deliverySession) || hasRoute || pickingAvoidPoint || avoidPoints.length > 0;
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -311,6 +352,11 @@ export function RoutePlannerScreen({
       console.error("Map error", e);
       setMapError("Não foi possível carregar o mapa agora. Tente recarregar a página.");
     });
+    map.on("click", (e) => {
+      if (!pickingAvoidRef.current) return;
+      addAvoidPoint(e.lngLat.lat, e.lngLat.lng);
+    });
+    map.getCanvas().style.cursor = "";
     mapRef.current = map;
     // O container só existe no DOM quando essa condição vira true — se o efeito
     // rodasse só uma vez (deps vazias), ele rodaria antes da seção aparecer e
@@ -442,6 +488,39 @@ export function RoutePlannerScreen({
     else map.once("load", draw);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeResult, kitchen, selectedStop]);
+
+  // Marcadores de "rua a evitar" (ruas esburacadas ou com dado de mapa
+  // errado) — ficam num efeito à parte porque precisam aparecer mesmo sem
+  // nenhuma rota gerada ainda, enquanto o admin tá marcando os pontos.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    function drawAvoidMarkers() {
+      if (!map) return;
+      avoidMarkersRef.current.forEach((m) => m.remove());
+      avoidMarkersRef.current = [];
+      for (const point of avoidPoints) {
+        const el = document.createElement("div");
+        el.style.cssText =
+          "width:22px;height:22px;border-radius:50%;background:#b91c1c;display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.35);cursor:pointer;";
+        el.innerHTML =
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M18 6 6 18M6 6l12 12" stroke-linecap="round"/></svg>';
+        el.title = "Remover ponto a evitar";
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          removeAvoidPoint(point.id);
+        });
+        avoidMarkersRef.current.push(
+          new maplibregl.Marker({ element: el }).setLngLat([point.lng, point.lat]).addTo(map)
+        );
+      }
+    }
+
+    if (map.isStyleLoaded()) drawAvoidMarkers();
+    else map.once("load", drawAvoidMarkers);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avoidPoints]);
 
   const eligibleCount = orders.length;
 
@@ -694,6 +773,41 @@ export function RoutePlannerScreen({
           <input type="checkbox" checked={roundTrip} onChange={(e) => setRoundTrip(e.target.checked)} />
           Voltar para a cozinha no final da rota
         </label>
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-2xl bg-white p-4">
+        <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">
+          Ruas a evitar
+        </h2>
+        <p className="text-sm text-coffee-soft">
+          Marque no mapa trechos de rua esburacados ou errados no mapa — a rota nunca mais vai
+          passar por ali.
+        </p>
+        {avoidPoints.length > 0 && (
+          <ul className="flex flex-col gap-1.5">
+            {avoidPoints.map((p, i) => (
+              <li
+                key={p.id}
+                className="flex items-center justify-between rounded-lg border border-coffee/10 px-3 py-2 text-sm"
+              >
+                <span className="text-coffee-soft">
+                  Ponto {i + 1} · {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
+                </span>
+                <button onClick={() => removeAvoidPoint(p.id)} className="text-xs font-bold text-danger">
+                  Remover
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <button
+          onClick={() => setPickingAvoidPoint((v) => !v)}
+          className={`min-h-11 self-start rounded-xl px-4 text-sm font-bold ${
+            pickingAvoidPoint ? "bg-danger-bg text-danger" : "bg-cream-soft text-coffee-soft"
+          }`}
+        >
+          {pickingAvoidPoint ? "Toque no mapa pra marcar (toque aqui pra cancelar)" : "Marcar rua no mapa"}
+        </button>
       </section>
 
       {selectedWindowId && (
