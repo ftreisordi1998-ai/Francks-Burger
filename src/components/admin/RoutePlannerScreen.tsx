@@ -86,6 +86,7 @@ export function RoutePlannerScreen({
   const [roundTrip, setRoundTrip] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [routeResult, setRouteResult] = useState<RoutePlanResult | null>(null);
+  const hasRoute = Boolean(routeResult && routeResult.stops.length > 0);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
   const [selectedStop, setSelectedStop] = useState<number | null>(null);
@@ -241,7 +242,7 @@ export function RoutePlannerScreen({
     fetchOrders();
   }, [selectedWindowId]);
 
-  const showMapSection = Boolean(deliverySession) || Boolean(routeResult && routeResult.stops.length > 0);
+  const showMapSection = Boolean(deliverySession) || hasRoute;
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -265,6 +266,16 @@ export function RoutePlannerScreen({
     // rodasse só uma vez (deps vazias), ele rodaria antes da seção aparecer e
     // nunca criaria o mapa.
   }, [showMapSection]);
+
+  useEffect(() => {
+    // O grid muda de 1 coluna (mapa cheio) pra 2 colunas (mapa + lista) — o
+    // MapLibre precisa ser avisado disso, senão os blocos do mapa ficam
+    // desalinhados até o próximo resize manual da janela.
+    const map = mapRef.current;
+    if (!map) return;
+    const timeout = setTimeout(() => map.resize(), 0);
+    return () => clearTimeout(timeout);
+  }, [hasRoute]);
 
   function fitToRoute() {
     const map = mapRef.current;
@@ -716,17 +727,17 @@ export function RoutePlannerScreen({
 
       {showMapSection && (
         <section className="overflow-hidden rounded-2xl bg-white">
-          {routeResult && routeResult.stops.length > 0 && (
+          {routeResult && hasRoute && (
             <div className="flex flex-wrap items-center gap-4 border-b border-cream-soft px-4 py-3 text-sm font-bold text-coffee">
               <span>{formatDistance(routeResult.totalDistanceMeters)}</span>
               <span>{formatDuration(routeResult.totalDurationSeconds)}</span>
             </div>
           )}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px]">
+          <div className={`grid grid-cols-1 ${hasRoute ? "lg:grid-cols-[1fr_300px]" : ""}`}>
             <div className="relative">
-              <div ref={mapContainerRef} className="h-[380px] w-full lg:h-[520px]" />
+              <div ref={mapContainerRef} className={`h-[380px] w-full ${hasRoute ? "lg:h-[520px]" : "lg:h-[600px]"}`} />
 
-              {routeResult && routeResult.stops.length > 0 && (
+              {hasRoute && (
                 <button
                   onClick={fitToRoute}
                   className="absolute left-3 top-3 min-h-9 rounded-lg bg-white/95 px-3 text-xs font-bold text-coffee shadow-md"
@@ -763,7 +774,7 @@ export function RoutePlannerScreen({
                 </div>
               )}
 
-              {deliverySession && !(routeResult && routeResult.stops.length > 0) && (
+              {deliverySession && !hasRoute && (
                 <p className="absolute bottom-3 left-3 rounded-lg bg-white/95 px-3 py-1.5 text-xs text-coffee-soft shadow-md">
                   {deliverySession.status === "active"
                     ? "Mostrando a posição do motoboy ao vivo."
@@ -772,7 +783,7 @@ export function RoutePlannerScreen({
               )}
             </div>
 
-            {routeResult && routeResult.stops.length > 0 && (
+            {routeResult && hasRoute && (
               <div className="flex flex-col gap-0 border-t border-cream-soft p-3 lg:max-h-[520px] lg:overflow-y-auto lg:border-l lg:border-t-0">
                 <h2 className="px-1 pb-2 text-base font-extrabold text-coffee">Rota planejada</h2>
                 <p className="px-1 pb-3 text-xs font-semibold text-coffee-soft">
