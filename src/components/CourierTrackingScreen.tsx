@@ -17,6 +17,15 @@ type QueuedPosition = {
   capturedAt: number;
 };
 
+type SessionStop = {
+  stop_index: number;
+  customer_name: string;
+  whatsapp: string | null;
+  address: string | null;
+  items: string | null;
+  delivered_at: string | null;
+};
+
 function getDeviceId(): string {
   try {
     const existing = localStorage.getItem(DEVICE_ID_KEY);
@@ -67,6 +76,8 @@ export function CourierTrackingScreen({ token }: { token: string }) {
   const [lastSentAt, setLastSentAt] = useState<number | null>(null);
   const [weakSignal, setWeakSignal] = useState(false);
   const [queuedCount, setQueuedCount] = useState(0);
+  const [stops, setStops] = useState<SessionStop[]>([]);
+  const [markingStop, setMarkingStop] = useState<number | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const lastUpdateRef = useRef(0);
   const deviceIdRef = useRef<string>("");
@@ -124,6 +135,28 @@ export function CourierTrackingScreen({ token }: { token: string }) {
     }
     checkSession();
   }, [token]);
+
+  async function loadStops() {
+    const supabase = createClient();
+    const { data } = await supabase.rpc("get_session_stops", { p_token: token });
+    if (data?.found) setStops(data.stops ?? []);
+  }
+
+  useEffect(() => {
+    loadStops();
+  }, [token]);
+
+  async function markDelivered(stopIndex: number) {
+    setMarkingStop(stopIndex);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("mark_stop_delivered", { p_token: token, p_stop_index: stopIndex });
+    setMarkingStop(null);
+    if (!error) {
+      setStops((prev) =>
+        prev.map((s) => (s.stop_index === stopIndex ? { ...s, delivered_at: new Date().toISOString() } : s))
+      );
+    }
+  }
 
   function stopWatching() {
     if (watchIdRef.current !== null) {
@@ -331,6 +364,42 @@ export function CourierTrackingScreen({ token }: { token: string }) {
           >
             Finalizar entrega
           </button>
+        </div>
+      )}
+
+      {(phase === "idle" || phase === "active") && stops.length > 0 && (
+        <div className="flex w-full max-w-sm flex-col gap-2 overflow-y-auto rounded-2xl bg-white/5 p-3 text-left">
+          <p className="px-1 text-xs font-bold uppercase tracking-wide text-white/50">
+            {stops.length} entrega{stops.length === 1 ? "" : "s"}
+          </p>
+          {stops.map((s) => (
+            <div
+              key={s.stop_index}
+              className={`flex items-start gap-3 rounded-xl p-3 ${s.delivered_at ? "bg-success/10" : "bg-white/10"}`}
+            >
+              <span
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                  s.delivered_at ? "bg-success text-white" : "bg-white/20 text-white"
+                }`}
+              >
+                {s.delivered_at ? "✓" : s.stop_index}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-white">{s.customer_name}</p>
+                <p className="truncate text-xs text-white/60">{s.address}</p>
+                {s.items && <p className="truncate text-xs text-white/50">{s.items}</p>}
+              </div>
+              {!s.delivered_at && (
+                <button
+                  onClick={() => markDelivered(s.stop_index)}
+                  disabled={markingStop === s.stop_index}
+                  className="shrink-0 rounded-full bg-orange px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                >
+                  {markingStop === s.stop_index ? "…" : "Entregue"}
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       )}
 

@@ -219,13 +219,13 @@ export interface RouteStop {
   lat: number;
   lng: number;
   addressLabel: string;
-  orders: { id: string; customerName: string; items: string; address: string }[];
+  orders: { id: string; customerName: string; whatsapp: string; items: string; address: string }[];
   etaIso: string | null;
+  legGeometry: { type: "LineString"; coordinates: [number, number][] } | null;
 }
 
 export interface RoutePlanResult {
   stops: RouteStop[];
-  geometry: { type: "LineString"; coordinates: [number, number][] } | null;
   returnGeometry: { type: "LineString"; coordinates: [number, number][] } | null;
   totalDistanceMeters: number;
   totalDurationSeconds: number;
@@ -249,6 +249,21 @@ export interface DeliverySession {
   updated_at: string;
   created_at: string;
   active_device_id: string | null;
+}
+
+export interface DeliverySessionStop {
+  id: string;
+  session_id: string;
+  stop_index: number;
+  order_id: string | null;
+  customer_name: string;
+  whatsapp: string | null;
+  address: string | null;
+  items: string | null;
+  lat: number | null;
+  lng: number | null;
+  delivered_at: string | null;
+  created_at: string;
 }
 
 export interface ActiveDeliveryPosition {

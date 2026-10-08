@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { ensureMaplibreWorker } from "@/lib/maplibre-worker-setup";
 import type {
   DeliverySession,
+  DeliverySessionStop,
   EditionOption,
   GeocodeStatus,
   KitchenLocation,
@@ -19,6 +20,15 @@ import type {
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 const ROUTE_ORANGE = "#e8540f";
+
+// Uma cor por trecho da rota (cozinha→parada 1, parada 1→parada 2...), pra
+// dar pra acompanhar visualmente qual pedaço leva a qual entrega. A primeira
+// parada fica com o laranja da marca; as demais giram por uma paleta fixa,
+// escolhida pra ficar bem distinguível sobre o mapa claro (Positron).
+const LEG_COLOR_PALETTE = [ROUTE_ORANGE, "#2563eb", "#059669", "#7c3aed", "#db2777", "#0891b2", "#ca8a04"];
+function legColor(stopIndex: number): string {
+  return LEG_COLOR_PALETTE[(stopIndex - 1) % LEG_COLOR_PALETTE.length];
+}
 
 const GEOCODE_REASON_LABEL: Record<GeocodeStatus, string> = {
   ok: "Localizado",
@@ -61,9 +71,9 @@ function storeIconEl(): HTMLDivElement {
   return el;
 }
 
-function stopMarkerEl(index: number, active: boolean): HTMLDivElement {
+function stopMarkerEl(index: number, active: boolean, color: string): HTMLDivElement {
   const el = document.createElement("div");
-  el.style.cssText = `width:${active ? 34 : 28}px;height:${active ? 34 : 28}px;border-radius:50%;background:${ROUTE_ORANGE};color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${active ? 15 : 13}px;border:2px solid white;box-shadow:${active ? "0 2px 10px rgba(0,0,0,0.45)" : "0 1px 4px rgba(0,0,0,0.3)"};transition:width 150ms,height 150ms;cursor:pointer;`;
+  el.style.cssText = `width:${active ? 34 : 28}px;height:${active ? 34 : 28}px;border-radius:50%;background:${color};color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${active ? 15 : 13}px;border:2px solid white;box-shadow:${active ? "0 2px 10px rgba(0,0,0,0.45)" : "0 1px 4px rgba(0,0,0,0.3)"};transition:width 150ms,height 150ms;cursor:pointer;`;
   el.textContent = String(index);
   return el;
 }
@@ -121,7 +131,81 @@ export function RoutePlannerScreen({
 
   const [deliverySession, setDeliverySession] = useState<DeliverySession | null>(null);
   const [creatingSession, setCreatingSession] = useState(false);
+  const [sessionStops, setSessionStops] = useState<DeliverySessionStop[]>([]);
   const channelSuffix = useRef(Math.random().toString(36).slice(2)).current;
+
+  // Acompanha em tempo real quais paradas o motoboy já marcou como
+  // entregues (ele marca pelo próprio link de rastreamento no celular).
+  useEffect(() => {
+    if (!deliverySession?.id) {
+      setSessionStops([]);
+      return;
+    }
+    const supabase = createClient();
+    let cancelled = false;
+
+    async function loadStops() {
+      const { data } = await supabase
+        .from("delivery_session_stops")
+        .select("*")
+        .eq("session_id", deliverySession!.id)
+        .order("stop_index", { ascending: true });
+      if (!cancelled) setSessionStops((data as DeliverySessionStop[] | null) ?? []);
+    }
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    async function subscribe() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) supabase.realtime.setAuth(session.access_token);
+      await loadStops();
+      channel = supabase
+        .channel(`admin-session-stops-${deliverySession!.id}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "delivery_session_stops", filter: `session_id=eq.${deliverySession!.id}` },
+          () => loadStops()
+        )
+        .subscribe();
+    }
+    subscribe();
+
+    return () => {
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [deliverySession?.id]);
+
+  function stopDeliveryInfo(stop: { stopIndex: number; orders: { id: string; customerName: string; whatsapp: string }[] }) {
+    const sessionStop = sessionStops.find((s) => s.stop_index === stop.stopIndex);
+    if (!sessionStop?.delivered_at) return null;
+    const firstWhatsapp = stop.orders[0]?.whatsapp;
+    const firstName = stop.orders[0]?.customerName?.split(" ")[0] ?? "";
+    const feedbackMessage = `Oi, ${firstName}! Aqui é da Franck's Burger 🍔 Esperamos que tenha gostado do seu lanche! Se puder, manda um feedback pra gente aqui ou tira uma fotinho e marca a gente no Instagram 😄`;
+    return (
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <span className="rounded-full bg-success-bg px-2 py-0.5 text-[11px] font-bold text-success">
+          Entregue às{" "}
+          {new Date(sessionStop.delivered_at).toLocaleTimeString("pt-BR", {
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZone: "America/Sao_Paulo",
+          })}
+        </span>
+        {firstWhatsapp && (
+          <a
+            href={`https://wa.me/55${firstWhatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(feedbackMessage)}`}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-full bg-cream-soft px-2 py-0.5 text-[11px] font-bold text-coffee-soft"
+          >
+            Enviar feedback no WhatsApp
+          </a>
+        )}
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (!selectedWindowId || !selectedEditionId) {
@@ -216,6 +300,29 @@ export function RoutePlannerScreen({
         created_at: new Date().toISOString(),
         active_device_id: null,
       });
+
+      // Salva a lista de paradas (nomes, endereços, itens) junto do link de
+      // rastreamento, pra o motoboy ver a rota completa com ordem e nomes no
+      // celular dele e poder marcar cada entrega como feita.
+      if (routeResult) {
+        await fetch("/api/admin/session-stops", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: data.id,
+            stops: routeResult.stops.map((s) => ({
+              stopIndex: s.stopIndex,
+              orderId: s.orders[0]?.id ?? null,
+              customerName: s.orders.map((o) => o.customerName).join(" + "),
+              whatsapp: s.orders[0]?.whatsapp ?? null,
+              address: s.orders[0]?.address ?? s.addressLabel,
+              items: s.orders.map((o) => o.items).join(" | "),
+              lat: s.lat,
+              lng: s.lng,
+            })),
+          }),
+        });
+      }
     }
   }
 
@@ -405,7 +512,7 @@ export function RoutePlannerScreen({
       }
 
       for (const stop of routeResult!.stops) {
-        const el = stopMarkerEl(stop.stopIndex, selectedStop === stop.stopIndex);
+        const el = stopMarkerEl(stop.stopIndex, selectedStop === stop.stopIndex, legColor(stop.stopIndex));
         el.addEventListener("click", (e: MouseEvent) => {
           e.stopPropagation();
           flyToStop(stop.stopIndex);
@@ -414,29 +521,37 @@ export function RoutePlannerScreen({
         bounds.extend([stop.lng, stop.lat]);
       }
 
-      if (routeResult!.geometry) {
-        const sourceId = "route-line";
-        const geojson = { type: "Feature" as const, properties: {}, geometry: routeResult!.geometry };
-        const existing = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
-        if (existing) {
-          existing.setData(geojson);
-        } else {
-          map.addSource(sourceId, { type: "geojson", data: geojson });
-          map.addLayer({
-            id: "route-line-halo",
-            type: "line",
-            source: sourceId,
-            layout: { "line-cap": "round", "line-join": "round" },
-            paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.9 },
-          });
-          map.addLayer({
-            id: "route-line",
-            type: "line",
-            source: sourceId,
-            layout: { "line-cap": "round", "line-join": "round" },
-            paint: { "line-color": ROUTE_ORANGE, "line-width": 5 },
-          });
-        }
+      // Um trecho por parada (cozinha→1, 1→2, 2→3...), cada um com sua própria
+      // cor — assim dá pra acompanhar visualmente qual pedaço da rota leva a
+      // qual entrega, em vez de uma linha só de ponta a ponta.
+      const sourceId = "route-line";
+      const legFeatures = routeResult!.stops
+        .filter((stop) => stop.legGeometry)
+        .map((stop) => ({
+          type: "Feature" as const,
+          properties: { color: legColor(stop.stopIndex) },
+          geometry: stop.legGeometry!,
+        }));
+      const legCollection = { type: "FeatureCollection" as const, features: legFeatures };
+      const existingLegs = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
+      if (existingLegs) {
+        existingLegs.setData(legCollection);
+      } else {
+        map.addSource(sourceId, { type: "geojson", data: legCollection });
+        map.addLayer({
+          id: "route-line-halo",
+          type: "line",
+          source: sourceId,
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.9 },
+        });
+        map.addLayer({
+          id: "route-line",
+          type: "line",
+          source: sourceId,
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": ["get", "color"], "line-width": 5 },
+        });
       }
 
       // Trecho de volta (depois da última parada até a cozinha) em estilo
@@ -816,13 +931,18 @@ export function RoutePlannerScreen({
             Acompanhamento ao vivo do motoboy
           </h2>
           {!deliverySession ? (
-            <button
-              onClick={createTrackingLink}
-              disabled={creatingSession}
-              className="min-h-11 self-start rounded-xl bg-orange px-4 text-sm font-bold text-white disabled:opacity-50"
-            >
-              {creatingSession ? "Criando…" : "Criar link para o motoboy"}
-            </button>
+            <div className="flex flex-col gap-1.5">
+              <button
+                onClick={createTrackingLink}
+                disabled={creatingSession || !hasRoute}
+                className="min-h-11 self-start rounded-xl bg-orange px-4 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {creatingSession ? "Criando…" : "Criar link para o motoboy"}
+              </button>
+              {!hasRoute && (
+                <p className="text-xs text-coffee-soft">Gere a rota primeiro, pra o link já sair com a lista de entregas.</p>
+              )}
+            </div>
           ) : (
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -1026,7 +1146,10 @@ export function RoutePlannerScreen({
                     }`}
                   >
                     <div className="flex flex-col items-center">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange text-sm font-bold text-white">
+                      <span
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+                        style={{ background: legColor(stop.stopIndex) }}
+                      >
                         {stop.stopIndex}
                       </span>
                       {i < routeResult.stops.length - 1 && (
@@ -1050,6 +1173,7 @@ export function RoutePlannerScreen({
                           {o.items && <span> · {o.items}</span>}
                         </p>
                       ))}
+                      {stopDeliveryInfo(stop)}
                     </div>
                   </button>
                 ))}

@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
     {
       lat: number;
       lng: number;
-      orders: { id: string; customerName: string; items: string; address: string }[];
+      orders: { id: string; customerName: string; whatsapp: string; items: string; address: string }[];
     }
   >();
   for (const o of routable) {
@@ -141,7 +141,9 @@ export async function POST(req: NextRequest) {
     if (!groups.has(key)) {
       groups.set(key, { lat, lng, orders: [] });
     }
-    groups.get(key)!.orders.push({ id: o.id, customerName: o.customer_name, items: itemsLabel, address });
+    groups
+      .get(key)!
+      .orders.push({ id: o.id, customerName: o.customer_name, whatsapp: o.whatsapp, items: itemsLabel, address });
   }
   const stopGroups = [...groups.values()];
 
@@ -168,29 +170,35 @@ export async function POST(req: NextRequest) {
 
   const orderedPoints = solvedOrder.map((idx) => points[idx]);
 
-  // Pede a geometria de ida e a de volta em chamadas separadas (em vez de uma
-  // única rota cozinha→paradas→cozinha) pra poder desenhar a volta com um
-  // estilo diferente no mapa — e pra não arriscar a Directions API "enrolar"
-  // o traçado tentando achar um jeito de voltar sem passar de novo pelas
-  // mesmas ruas de mão única.
-  let directionsResult;
+  // Pede a geometria de cada trecho (cozinha→parada 1, parada 1→parada 2, ...)
+  // em chamadas separadas, em vez de uma única rota combinada — assim dá pra
+  // colorir cada trecho de um jeito diferente no mapa (fácil de acompanhar
+  // qual parada é qual numa rota com várias entregas) e a volta continua
+  // isolada num traçado próprio, sem arriscar a Directions API "enrolar" o
+  // caminho tentando voltar sem repetir as mesmas ruas de mão única.
+  const legGeometries: { type: "LineString"; coordinates: [number, number][] }[] = [];
+  let totalDistanceMeters = 0;
+  let totalDurationSeconds = 0;
   try {
-    directionsResult = await drivingDirections(orderedPoints, avoidPoints);
+    for (let i = 0; i < orderedPoints.length - 1; i++) {
+      const leg = await drivingDirections([orderedPoints[i], orderedPoints[i + 1]], avoidPoints);
+      legGeometries.push(leg.geometry);
+      totalDistanceMeters += leg.distanceMeters;
+      totalDurationSeconds += leg.durationSeconds;
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : "DIRECTIONS_REQUEST_FAILED";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
   let returnGeometry: { type: "LineString"; coordinates: [number, number][] } | null = null;
-  let returnDistanceMeters = 0;
-  let returnDurationSeconds = 0;
   if (roundTrip && orderedPoints.length > 0) {
     const lastStop = orderedPoints[orderedPoints.length - 1];
     try {
       const returnResult = await drivingDirections([lastStop, points[0]], avoidPoints);
       returnGeometry = returnResult.geometry;
-      returnDistanceMeters = returnResult.distanceMeters;
-      returnDurationSeconds = returnResult.durationSeconds;
+      totalDistanceMeters += returnResult.distanceMeters;
+      totalDurationSeconds += returnResult.durationSeconds;
     } catch (err) {
       const message = err instanceof Error ? err.message : "DIRECTIONS_REQUEST_FAILED";
       return NextResponse.json({ error: message }, { status: 502 });
@@ -218,15 +226,15 @@ export async function POST(req: NextRequest) {
         addressLabel: group.orders.map((o) => o.customerName).join(" + "),
         orders: group.orders,
         etaIso,
+        legGeometry: legGeometries[i] ?? null,
       };
     });
 
   return NextResponse.json({
     stops,
-    geometry: directionsResult.geometry,
     returnGeometry,
-    totalDistanceMeters: directionsResult.distanceMeters + returnDistanceMeters,
-    totalDurationSeconds: directionsResult.durationSeconds + returnDurationSeconds,
+    totalDistanceMeters,
+    totalDurationSeconds,
     failedOrders,
     departureIso,
   });
