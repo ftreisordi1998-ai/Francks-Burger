@@ -118,12 +118,15 @@ export function RoutePlannerScreen({
   const channelSuffix = useRef(Math.random().toString(36).slice(2)).current;
 
   useEffect(() => {
+    if (!selectedWindowId || !selectedEditionId) {
+      setDeliverySession(null);
+      return;
+    }
+    const supabase = createClient();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
     async function loadSession() {
-      if (!selectedWindowId || !selectedEditionId) {
-        setDeliverySession(null);
-        return;
-      }
-      const supabase = createClient();
       const { data } = await supabase
         .from("delivery_sessions")
         .select("*")
@@ -133,40 +136,35 @@ export function RoutePlannerScreen({
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      setDeliverySession((data as DeliverySession | null) ?? null);
+      if (!cancelled) setDeliverySession((data as DeliverySession | null) ?? null);
     }
-    loadSession();
-  }, [selectedEditionId, selectedWindowId]);
-
-  useEffect(() => {
-    if (!deliverySession) return;
-    const sessionId = deliverySession.id;
-    const supabase = createClient();
-    let channel: ReturnType<typeof supabase.channel> | null = null;
 
     async function start() {
+      await loadSession();
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (session) supabase.realtime.setAuth(session.access_token);
 
+      // Escuta desde já (não só depois de já ter uma sessão carregada nesta
+      // aba) — assim, se o link for criado em outro dispositivo/aba enquanto
+      // esta tela está aberta, ela também fica sabendo sozinha.
       channel = supabase
         .channel(`admin-delivery-session-${channelSuffix}`)
         .on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "delivery_sessions", filter: `id=eq.${sessionId}` },
-          (payload) => {
-            setDeliverySession(payload.new as DeliverySession);
-          }
+          { event: "*", schema: "public", table: "delivery_sessions", filter: `window_id=eq.${selectedWindowId}` },
+          () => loadSession()
         )
         .subscribe();
     }
     start();
 
     return () => {
+      cancelled = true;
       if (channel) supabase.removeChannel(channel);
     };
-  }, [deliverySession?.id, channelSuffix]);
+  }, [selectedEditionId, selectedWindowId, channelSuffix]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -214,33 +212,84 @@ export function RoutePlannerScreen({
     }
   }
 
-  useEffect(() => {
-    async function fetchOrders() {
-      if (!selectedWindowId) {
-        setOrders([]);
-        return;
-      }
-      setLoadingOrders(true);
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("orders")
-        .select(
-          "id, customer_name, whatsapp, address_street, address_number, address_complement, address_reference, neighborhood_name_snapshot, address_lat, address_lng, address_geocode_status, order_items(product_name_snapshot, qty)"
-        )
-        .eq("window_id", selectedWindowId)
-        .eq("fulfillment_type", "delivery")
-        .in("order_status", ["confirmed", "preparing", "ready", "out_for_delivery"])
-        .order("created_at", { ascending: true });
-      const rows = (data ?? []) as unknown as RouteOrderRow[];
+  async function fetchOrders(windowId: string, resetSelection: boolean) {
+    if (!windowId) {
+      setOrders([]);
+      return;
+    }
+    if (resetSelection) setLoadingOrders(true);
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("orders")
+      .select(
+        "id, customer_name, whatsapp, address_street, address_number, address_complement, address_reference, neighborhood_name_snapshot, address_lat, address_lng, address_geocode_status, order_items(product_name_snapshot, qty)"
+      )
+      .eq("window_id", windowId)
+      .eq("fulfillment_type", "delivery")
+      .in("order_status", ["confirmed", "preparing", "ready", "out_for_delivery"])
+      .order("created_at", { ascending: true });
+    const rows = (data ?? []) as unknown as RouteOrderRow[];
+    if (resetSelection) {
       setOrders(rows);
       setSelected(new Set(rows.map((r) => r.id)));
       setRouteResult(null);
       setRouteError(null);
       setSelectedStop(null);
-      setLoadingOrders(false);
+    } else {
+      // Atualização automática (pedido novo, cancelado, status mudou): mantém a
+      // seleção manual de quem já estava marcado/desmarcado, só adiciona os
+      // pedidos novos já selecionados por padrão e tira quem saiu da janela.
+      // Usa a forma funcional dos dois setters pra nunca comparar com um
+      // "orders"/"selected" desatualizado (a função pode ser chamada de dentro
+      // de um callback do Realtime criado em outra renderização).
+      setOrders((prevOrders) => {
+        const prevIds = new Set(prevOrders.map((o) => o.id));
+        setSelected((prevSelected) => {
+          const rowIds = new Set(rows.map((r) => r.id));
+          const next = new Set([...prevSelected].filter((id) => rowIds.has(id)));
+          for (const r of rows) {
+            if (!prevIds.has(r.id)) next.add(r.id);
+          }
+          return next;
+        });
+        return rows;
+      });
     }
-    fetchOrders();
+    setLoadingOrders(false);
+  }
+
+  useEffect(() => {
+    fetchOrders(selectedWindowId, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedWindowId]);
+
+  useEffect(() => {
+    if (!selectedWindowId) return;
+    const supabase = createClient();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    async function start() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) supabase.realtime.setAuth(session.access_token);
+
+      channel = supabase
+        .channel(`admin-rotas-orders-${channelSuffix}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "orders", filter: `window_id=eq.${selectedWindowId}` },
+          () => fetchOrders(selectedWindowId, false)
+        )
+        .subscribe();
+    }
+    start();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWindowId, channelSuffix]);
 
   const showMapSection = Boolean(deliverySession) || hasRoute;
 
