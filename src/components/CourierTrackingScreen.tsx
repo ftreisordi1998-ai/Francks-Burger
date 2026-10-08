@@ -5,8 +5,17 @@ import { createClient } from "@/lib/supabase/client";
 
 const MIN_UPDATE_INTERVAL_MS = 4000;
 const DEVICE_ID_KEY = "francksburger.courier.deviceId";
+const QUEUE_KEY_PREFIX = "francksburger.courier.offlineQueue.";
+const MAX_QUEUE_LENGTH = 200;
 
 type Phase = "loading" | "invalid" | "idle" | "active" | "ended" | "error" | "locked";
+
+type QueuedPosition = {
+  lat: number;
+  lng: number;
+  heading: number | null;
+  capturedAt: number;
+};
 
 function getDeviceId(): string {
   try {
@@ -22,18 +31,85 @@ function getDeviceId(): string {
   }
 }
 
+// Enquanto não há internet, guarda as posições no aparelho em vez de
+// perdê-las — assim que a conexão voltar, reenviamos tudo em ordem pra não
+// deixar buraco no trajeto mostrado no mapa.
+function loadQueue(token: string): QueuedPosition[] {
+  try {
+    const raw = localStorage.getItem(QUEUE_KEY_PREFIX + token);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveQueue(token: string, queue: QueuedPosition[]) {
+  try {
+    localStorage.setItem(QUEUE_KEY_PREFIX + token, JSON.stringify(queue.slice(-MAX_QUEUE_LENGTH)));
+  } catch {
+    // Sem storage disponível — a fila fica só em memória pra essa sessão.
+  }
+}
+
+function clearQueue(token: string) {
+  try {
+    localStorage.removeItem(QUEUE_KEY_PREFIX + token);
+  } catch {
+    // ignore
+  }
+}
+
 export function CourierTrackingScreen({ token }: { token: string }) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastSentAt, setLastSentAt] = useState<number | null>(null);
   const [weakSignal, setWeakSignal] = useState(false);
+  const [queuedCount, setQueuedCount] = useState(0);
   const watchIdRef = useRef<number | null>(null);
   const lastUpdateRef = useRef(0);
   const deviceIdRef = useRef<string>("");
+  const queueRef = useRef<QueuedPosition[]>([]);
+  const flushingRef = useRef(false);
+  const flushTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     deviceIdRef.current = getDeviceId();
   }, []);
+
+  function enqueue(position: QueuedPosition) {
+    queueRef.current = [...queueRef.current, position].slice(-MAX_QUEUE_LENGTH);
+    saveQueue(token, queueRef.current);
+    setQueuedCount(queueRef.current.length);
+  }
+
+  // Tenta reenviar a fila em ordem; para no primeiro erro (provavelmente
+  // ainda sem internet) e tenta de novo mais tarde, sem perder nada.
+  async function flushQueue() {
+    if (flushingRef.current || queueRef.current.length === 0) return;
+    flushingRef.current = true;
+    try {
+      const supabase = createClient();
+      while (queueRef.current.length > 0) {
+        const next = queueRef.current[0];
+        const { error } = await supabase.rpc("update_delivery_position", {
+          p_token: token,
+          p_lat: next.lat,
+          p_lng: next.lng,
+          p_heading: next.heading,
+        });
+        if (error) break;
+        queueRef.current = queueRef.current.slice(1);
+        saveQueue(token, queueRef.current);
+        setQueuedCount(queueRef.current.length);
+        setLastSentAt(next.capturedAt);
+      }
+      if (queueRef.current.length === 0) clearQueue(token);
+    } finally {
+      flushingRef.current = false;
+    }
+  }
 
   useEffect(() => {
     async function checkSession() {
@@ -77,6 +153,12 @@ export function CourierTrackingScreen({ token }: { token: string }) {
       return;
     }
 
+    // Retoma qualquer posição que ficou presa de uma queda de conexão
+    // anterior (ex: página recarregada sem internet) antes de começar a
+    // mandar posições novas.
+    queueRef.current = loadQueue(token);
+    setQueuedCount(queueRef.current.length);
+
     setPhase("active");
     setWeakSignal(false);
     watchIdRef.current = navigator.geolocation.watchPosition(
@@ -85,13 +167,33 @@ export function CourierTrackingScreen({ token }: { token: string }) {
         const now = Date.now();
         if (now - lastUpdateRef.current < MIN_UPDATE_INTERVAL_MS) return;
         lastUpdateRef.current = now;
+
+        const current: QueuedPosition = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          heading: pos.coords.heading,
+          capturedAt: now,
+        };
+
+        // Se já tem coisa acumulada na fila, manda essa posição pro final
+        // da fila também — assim a ordem do trajeto nunca se embaralha.
+        if (queueRef.current.length > 0) {
+          enqueue(current);
+          flushQueue();
+          return;
+        }
+
         const supabase = createClient();
-        await supabase.rpc("update_delivery_position", {
+        const { error } = await supabase.rpc("update_delivery_position", {
           p_token: token,
-          p_lat: pos.coords.latitude,
-          p_lng: pos.coords.longitude,
-          p_heading: pos.coords.heading,
+          p_lat: current.lat,
+          p_lng: current.lng,
+          p_heading: current.heading,
         });
+        if (error) {
+          enqueue(current);
+          return;
+        }
         setLastSentAt(now);
       },
       (err) => {
@@ -114,6 +216,7 @@ export function CourierTrackingScreen({ token }: { token: string }) {
 
   async function finishDelivery() {
     stopWatching();
+    await flushQueue();
     const supabase = createClient();
     await supabase.rpc("end_delivery_session", { p_token: token });
     setPhase("ended");
@@ -122,6 +225,20 @@ export function CourierTrackingScreen({ token }: { token: string }) {
   useEffect(() => {
     return () => stopWatching();
   }, []);
+
+  // Enquanto a entrega está ativa, tenta reenviar a fila pendente sempre que
+  // a internet voltar (evento "online") e também de tempos em tempos — o
+  // evento "online" nem sempre dispara de forma confiável em celular.
+  useEffect(() => {
+    if (phase !== "active") return;
+    const onOnline = () => flushQueue();
+    window.addEventListener("online", onOnline);
+    flushTimerRef.current = setInterval(() => flushQueue(), 10000);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      if (flushTimerRef.current) clearInterval(flushTimerRef.current);
+    };
+  }, [phase]);
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-coffee px-6 text-center">
@@ -171,7 +288,7 @@ export function CourierTrackingScreen({ token }: { token: string }) {
       {phase === "active" && (
         <div className="flex flex-col items-center gap-5">
           <div className="relative flex h-24 w-24 items-center justify-center">
-            {!weakSignal && (
+            {!weakSignal && queuedCount === 0 && (
               <>
                 <span className="absolute h-full w-full animate-ping rounded-full bg-success/40" />
                 <span className="absolute h-16 w-16 animate-ping rounded-full bg-success/50 [animation-delay:200ms]" />
@@ -179,7 +296,7 @@ export function CourierTrackingScreen({ token }: { token: string }) {
             )}
             <span
               className={`relative flex h-14 w-14 items-center justify-center rounded-full text-2xl ${
-                weakSignal ? "bg-warning" : "bg-success"
+                queuedCount > 0 ? "bg-warning" : weakSignal ? "bg-warning" : "bg-success"
               }`}
             >
               🛵
@@ -187,13 +304,23 @@ export function CourierTrackingScreen({ token }: { token: string }) {
           </div>
           <div>
             <p className="text-base font-extrabold text-white">
-              {weakSignal ? "Buscando sinal de GPS…" : "Transmitindo localização…"}
+              {queuedCount > 0
+                ? "Sem internet — salvando no aparelho…"
+                : weakSignal
+                  ? "Buscando sinal de GPS…"
+                  : "Transmitindo localização…"}
             </p>
             <p className="mt-0.5 text-xs text-white/60">
               {lastSentAt
                 ? `Última atualização: ${new Date(lastSentAt).toLocaleTimeString("pt-BR")}`
                 : "Aguardando primeiro sinal…"}
             </p>
+            {queuedCount > 0 && (
+              <p className="mt-1 text-xs text-warning">
+                {queuedCount} {queuedCount === 1 ? "posição" : "posições"} aguardando internet pra
+                enviar. Nada se perde — assim que a conexão voltar, envia tudo automaticamente.
+              </p>
+            )}
             <p className="mt-2 max-w-[220px] text-xs text-white/50">
               Mantenha essa aba aberta e a tela do celular ligada durante a entrega.
             </p>
