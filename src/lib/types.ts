@@ -211,7 +211,8 @@ export interface RouteStop {
   lat: number;
   lng: number;
   addressLabel: string;
-  orders: { id: string; customerName: string; items: string }[];
+  orders: { id: string; customerName: string; items: string; address: string }[];
+  etaIso: string | null;
 }
 
 export interface RoutePlanResult {
@@ -220,6 +221,7 @@ export interface RoutePlanResult {
   totalDistanceMeters: number;
   totalDurationSeconds: number;
   failedOrders: { id: string; customerName: string; reason: GeocodeStatus }[];
+  departureIso: string | null;
 }
 
 export type DeliverySessionStatus = "pending" | "active" | "ended";

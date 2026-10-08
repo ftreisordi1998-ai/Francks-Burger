@@ -25,9 +25,23 @@ export async function POST(req: NextRequest) {
   const { ok, supabase } = await requireAdmin();
   if (!ok) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
-  const { orderIds, roundTrip } = (await req.json()) as { orderIds: string[]; roundTrip: boolean };
+  const { orderIds, roundTrip, windowId } = (await req.json()) as {
+    orderIds: string[];
+    roundTrip: boolean;
+    windowId?: string;
+  };
   if (!Array.isArray(orderIds) || orderIds.length === 0) {
     return NextResponse.json({ error: "NO_ORDERS_SELECTED" }, { status: 400 });
+  }
+
+  let departureIso: string | null = null;
+  if (windowId) {
+    const { data: window } = await supabase
+      .from("delivery_windows")
+      .select("starts_at")
+      .eq("id", windowId)
+      .maybeSingle();
+    departureIso = window?.starts_at ?? null;
   }
 
   const { data: kitchen } = await supabase
@@ -102,23 +116,29 @@ export async function POST(req: NextRequest) {
       totalDistanceMeters: 0,
       totalDurationSeconds: 0,
       failedOrders,
+      departureIso,
     });
   }
 
   // Agrupa pedidos no mesmo endereço confirmado em uma única parada.
   const groups = new Map<
     string,
-    { lat: number; lng: number; orders: { id: string; customerName: string; items: string }[] }
+    {
+      lat: number;
+      lng: number;
+      orders: { id: string; customerName: string; items: string; address: string }[];
+    }
   >();
   for (const o of routable) {
     const lat = roundCoord(o.address_lat!);
     const lng = roundCoord(o.address_lng!);
     const key = `${lat},${lng}`;
     const itemsLabel = (o.order_items ?? []).map((i) => `${i.qty}× ${i.product_name_snapshot}`).join(", ");
+    const address = [o.address_street, o.address_number].filter(Boolean).join(", ");
     if (!groups.has(key)) {
       groups.set(key, { lat, lng, orders: [] });
     }
-    groups.get(key)!.orders.push({ id: o.id, customerName: o.customer_name, items: itemsLabel });
+    groups.get(key)!.orders.push({ id: o.id, customerName: o.customer_name, items: itemsLabel, address });
   }
   const stopGroups = [...groups.values()];
 
@@ -154,16 +174,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
+  // Horário estimado de cada parada = partida + soma da duração real (pela
+  // matriz) de cada trecho percorrido até ali, nunca inventado.
+  const departureMs = departureIso ? new Date(departureIso).getTime() : null;
+  let cumulativeSeconds = 0;
   const stops: RouteStop[] = solvedOrder
-    .filter((idx) => idx !== 0)
     .map((idx, i) => {
-      const group = stopGroups[idx - 1];
+      if (i > 0) cumulativeSeconds += matrix.durations[solvedOrder[i - 1]][idx];
+      return { idx, etaSeconds: cumulativeSeconds };
+    })
+    .filter((entry) => entry.idx !== 0)
+    .map((entry, i) => {
+      const group = stopGroups[entry.idx - 1];
+      const etaIso =
+        departureMs !== null ? new Date(departureMs + entry.etaSeconds * 1000).toISOString() : null;
       return {
         stopIndex: i + 1,
         lat: group.lat,
         lng: group.lng,
         addressLabel: group.orders.map((o) => o.customerName).join(" + "),
         orders: group.orders,
+        etaIso,
       };
     });
 
@@ -173,5 +204,6 @@ export async function POST(req: NextRequest) {
     totalDistanceMeters: directionsResult.distanceMeters,
     totalDurationSeconds: directionsResult.durationSeconds,
     failedOrders,
+    departureIso,
   });
 }
