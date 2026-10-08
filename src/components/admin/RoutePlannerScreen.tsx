@@ -182,7 +182,11 @@ export function RoutePlannerScreen({
     if (!sessionStop?.delivered_at) return null;
     const firstWhatsapp = stop.orders[0]?.whatsapp;
     const firstName = stop.orders[0]?.customerName?.split(" ")[0] ?? "";
-    const feedbackMessage = `Oi, ${firstName}! Aqui é da Franck's Burger 🍔 Esperamos que tenha gostado do seu lanche! Se puder, manda um feedback pra gente aqui ou tira uma fotinho e marca a gente no Instagram 😄`;
+    // Emojis de fora do plano básico do Unicode (como 🍔 e 😄, que usam 4
+    // bytes em UTF-8) às vezes chegam corrompidos ("�") pelo WhatsApp
+    // Web/Desktop no Mac. Usamos só emojis do plano básico (3 bytes), que
+    // todo WhatsApp — Mac, Windows, Android, iPhone — renderiza sem erro.
+    const feedbackMessage = `Oi, ${firstName}! Aqui é da Franck's Burger ✨ Esperamos que tenha gostado do seu lanche! Se puder, manda um feedback pra gente aqui ou tira uma fotinho e marca a gente no Instagram ☺`;
     return (
       <div className="mt-1 flex flex-wrap items-center gap-2">
         <span className="rounded-full bg-success-bg px-2 py-0.5 text-[11px] font-bold text-success">

@@ -170,7 +170,10 @@ export function ProductionListScreen({
 
   function buildOutForDeliveryMessage(order: ProductionOrder) {
     const firstName = order.customer_name.trim().split(/\s+/)[0];
-    return `Oi, ${firstName}! Seu pedido Franck's Burger já saiu para entrega 🛵🍔 Chega até você dentro do horário ${order.window_label_snapshot}. Qualquer coisa, é só chamar por aqui!`;
+    // 🛵 e 🍔 são emojis "fora do plano básico" do Unicode (4 bytes em UTF-8)
+    // e às vezes chegam corrompidos ("�") pelo WhatsApp Web/Desktop no Mac —
+    // usamos ✨ (3 bytes) aqui, que todo WhatsApp renderiza sem erro.
+    return `Oi, ${firstName}! Seu pedido Franck's Burger já saiu para entrega ✨ Chega até você dentro do horário ${order.window_label_snapshot}. Qualquer coisa, é só chamar por aqui!`;
   }
 
   function buildConfirmedMessage(order: ProductionOrder) {
