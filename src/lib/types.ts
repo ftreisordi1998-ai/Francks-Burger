@@ -72,6 +72,8 @@ export interface OrderIncomeRow {
   total_cents: number;
   payment_method: PaymentMethod;
   created_at: string;
+  payment_confirmed_at: string | null;
+  payment_confirmed_by: string | null;
 }
 
 export interface PendingOrderRow {
@@ -188,6 +190,9 @@ export interface AdminOrderRow {
   expires_at: string | null;
   cancel_reason: string | null;
   confirmation_notified_at: string | null;
+  payment_confirmed_at: string | null;
+  payment_confirmed_by: string | null;
+  delivered_at: string | null;
   editions: { title: string; prep_date: string } | null;
   payment_proofs: PaymentProof[];
 }

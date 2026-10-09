@@ -40,7 +40,7 @@ export default async function AdminProductionPage({
     supabase
       .from("orders")
       .select(
-        "id, customer_name, whatsapp, fulfillment_type, window_id, window_label_snapshot, order_status, payment_method, payment_status, cancel_reason, created_at, order_items(product_name_snapshot, doneness, customer_note, qty)"
+        "id, customer_name, whatsapp, fulfillment_type, window_id, window_label_snapshot, address_street, address_number, address_complement, address_reference, neighborhood_name_snapshot, notes, subtotal_cents, delivery_fee_cents, total_cents, cash_change_for_cents, order_status, payment_method, payment_status, payment_confirmed_at, payment_confirmed_by, delivered_at, cancel_reason, created_at, order_items(product_name_snapshot, doneness, customer_note, qty)"
       )
       .eq("edition_id", editionId)
       .order("created_at", { ascending: true }),

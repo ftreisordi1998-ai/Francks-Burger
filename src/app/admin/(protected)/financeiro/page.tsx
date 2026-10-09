@@ -75,7 +75,7 @@ export default async function AdminFinanceiroPage({
       .order("created_at", { ascending: false }),
     supabase
       .from("orders")
-      .select("id, customer_name, total_cents, payment_method, created_at")
+      .select("id, customer_name, total_cents, payment_method, created_at, payment_confirmed_at, payment_confirmed_by")
       .eq("edition_id", editionId)
       .eq("payment_status", "paid")
       .order("created_at", { ascending: false }),

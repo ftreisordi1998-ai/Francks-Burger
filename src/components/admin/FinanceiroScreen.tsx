@@ -18,12 +18,6 @@ import type {
   PendingOrderRow,
 } from "@/lib/types";
 
-const PAYMENT_METHOD_TO_FINANCE: Record<PaymentMethod, FinancePaymentMethod> = {
-  pix: "pix",
-  card: "cartao",
-  cash: "dinheiro",
-};
-
 const EXPENSE_SUGGESTION_GROUPS: { label: string; items: string[] }[] = [
   {
     label: "Insumos do lanche",
@@ -104,8 +98,10 @@ export function FinanceiroScreen({
   const [incomeAmount, setIncomeAmount] = useState("");
   const [incomeMethod, setIncomeMethod] = useState<FinancePaymentMethod>("pix");
   const [savingIncome, setSavingIncome] = useState(false);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [openWindowId, setOpenWindowId] = useState<string | null>(null);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [confirmMethod, setConfirmMethod] = useState<PaymentMethod>("pix");
+  const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
 
   const registeredOrderIds = useMemo(
     () => new Set(incomes.map((i) => i.order_id).filter((id): id is string => Boolean(id))),
@@ -123,13 +119,35 @@ export function FinanceiroScreen({
     return map;
   }, [pendingOrders, registeredOrderIds]);
 
-  function pickOrderForIncome(order: PendingOrderRow) {
-    setSelectedOrderId(order.id);
-    setIncomeDesc(order.customer_name);
-    setIncomeAmount(centsToInput(order.total_cents));
-    const confirmed = confirmedPaymentByOrderId[order.id];
-    const method = (confirmed as PaymentMethod | undefined) ?? order.payment_method;
-    setIncomeMethod(PAYMENT_METHOD_TO_FINANCE[method] ?? "pix");
+  function toggleOrderForConfirm(order: PendingOrderRow) {
+    if (expandedOrderId === order.id) {
+      setExpandedOrderId(null);
+      return;
+    }
+    setExpandedOrderId(order.id);
+    const confirmed = confirmedPaymentByOrderId[order.id] as PaymentMethod | undefined;
+    setConfirmMethod(confirmed ?? order.payment_method);
+  }
+
+  async function confirmOrderPayment(order: PendingOrderRow) {
+    setConfirmingOrderId(order.id);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("confirm_order_payment", {
+      p_order_id: order.id,
+      p_method: confirmMethod,
+      p_confirmed_by: "admin",
+    });
+    setConfirmingOrderId(null);
+    if (error) {
+      await alertDialog({
+        title: "Não foi possível confirmar",
+        message: "Tente novamente em instantes.",
+        tone: "danger",
+      });
+      return;
+    }
+    setExpandedOrderId(null);
+    router.refresh();
   }
 
   const [expenses, setExpenses] = useState(initialExpenses);
@@ -169,7 +187,6 @@ export function FinanceiroScreen({
         description: incomeDesc.trim(),
         amount_cents,
         payment_method: incomeMethod,
-        order_id: selectedOrderId,
       })
       .select("*")
       .single();
@@ -178,7 +195,6 @@ export function FinanceiroScreen({
       setIncomes((prev) => [data as FinanceIncome, ...prev]);
       setIncomeDesc("");
       setIncomeAmount("");
-      setSelectedOrderId(null);
     }
   }
 
@@ -281,10 +297,12 @@ export function FinanceiroScreen({
     for (const o of orderIncomes) {
       rows.push({
         id: `order-${o.id}`,
-        date: o.created_at,
+        date: o.payment_confirmed_at ?? o.created_at,
         kind: "Pedido do site",
         description: o.customer_name,
-        detail: PAYMENT_METHOD_LABEL[o.payment_method],
+        detail:
+          PAYMENT_METHOD_LABEL[o.payment_method] +
+          (o.payment_confirmed_by ? ` · confirmado por ${o.payment_confirmed_by}` : ""),
         amountCents: o.total_cents,
         sign: 1,
       });
@@ -483,23 +501,45 @@ export function FinanceiroScreen({
                       ) : (
                         windowPending.map((order) => {
                           const confirmed = confirmedPaymentByOrderId[order.id] as PaymentMethod | undefined;
+                          const isExpanded = expandedOrderId === order.id;
                           return (
-                            <button
-                              key={order.id}
-                              onClick={() => pickOrderForIncome(order)}
-                              className={`flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                                selectedOrderId === order.id ? "bg-orange-soft/40" : "hover:bg-cream-soft"
-                              }`}
-                            >
-                              <div>
-                                <p className="font-bold text-coffee">{order.customer_name}</p>
-                                <p className="text-xs text-coffee-soft">
-                                  {PAYMENT_METHOD_LABEL[confirmed ?? order.payment_method]}
-                                  {confirmed && confirmed !== order.payment_method && " · confirmado pelo motoboy"}
-                                </p>
-                              </div>
-                              <span className="font-bold text-coffee">{formatCents(order.total_cents)}</span>
-                            </button>
+                            <div key={order.id} className="rounded-lg">
+                              <button
+                                onClick={() => toggleOrderForConfirm(order)}
+                                className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                                  isExpanded ? "bg-orange-soft/40" : "hover:bg-cream-soft"
+                                }`}
+                              >
+                                <div>
+                                  <p className="font-bold text-coffee">{order.customer_name}</p>
+                                  <p className="text-xs text-coffee-soft">
+                                    {PAYMENT_METHOD_LABEL[confirmed ?? order.payment_method]}
+                                    {confirmed && confirmed !== order.payment_method && " · confirmado pelo motoboy"}
+                                  </p>
+                                </div>
+                                <span className="font-bold text-coffee">{formatCents(order.total_cents)}</span>
+                              </button>
+                              {isExpanded && (
+                                <div className="flex flex-wrap items-center gap-2 rounded-lg bg-cream-soft px-3 py-2.5">
+                                  <select
+                                    value={confirmMethod}
+                                    onChange={(e) => setConfirmMethod(e.target.value as PaymentMethod)}
+                                    className="min-h-9 rounded-lg border border-coffee/10 bg-white px-2 py-1 text-xs font-semibold"
+                                  >
+                                    <option value="pix">Pix</option>
+                                    <option value="card">Cartão</option>
+                                    <option value="cash">Dinheiro</option>
+                                  </select>
+                                  <button
+                                    onClick={() => confirmOrderPayment(order)}
+                                    disabled={confirmingOrderId === order.id}
+                                    className="min-h-9 rounded-lg bg-orange px-3 text-xs font-bold text-white disabled:opacity-50"
+                                  >
+                                    {confirmingOrderId === order.id ? "Confirmando…" : "Confirmar recebimento"}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           );
                         })
                       )}
