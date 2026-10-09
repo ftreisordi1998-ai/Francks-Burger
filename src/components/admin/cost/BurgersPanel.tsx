@@ -145,7 +145,14 @@ export function BurgersPanel({
                 <span className="text-xs text-coffee-soft">Preço ref.: {formatBRL(burger.reference_price)}</span>
                 <span className="ml-auto text-right text-xs">
                   {!breakdown || !breakdown.complete ? (
-                    <span className="font-bold text-danger">Custo incompleto</span>
+                    <span className="font-bold text-danger">
+                      Custo incompleto
+                      {breakdown && (
+                        <span className="block font-normal text-coffee-soft">
+                          Subtotal dos itens calculáveis: {formatBRL(breakdown.direct_cost)}
+                        </span>
+                      )}
+                    </span>
                   ) : (
                     <span className="font-bold text-coffee">Custo {formatBRL(cost)}</span>
                   )}

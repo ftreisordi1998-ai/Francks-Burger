@@ -386,13 +386,15 @@ export interface CostBurgerItem {
 
 export interface CostBreakdownItem {
   id: string;
-  name: string;
+  ref_id: string | null;
+  name: string | null;
   type: RecipeItemComponentType;
   qty: number;
   unit: string;
   unit_cost: number | null;
   line_cost: number | null;
   complete: boolean;
+  incomplete_reason: string | null;
 }
 
 export interface CostBreakdown {
@@ -402,6 +404,7 @@ export interface CostBreakdown {
   items: CostBreakdownItem[];
   total_cost?: number;
   direct_cost?: number;
+  incomplete_reason?: string | null;
   yield_qty?: number;
   yield_unit?: string;
   cost_per_yield_unit?: number;

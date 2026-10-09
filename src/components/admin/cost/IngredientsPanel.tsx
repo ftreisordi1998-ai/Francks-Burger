@@ -16,7 +16,7 @@ const STATUS_BADGE: Record<PriceStatus, string> = {
   pendente: "bg-danger-bg text-danger",
 };
 
-type UnitCostInfo = { unit_cost: number | null; base_unit: string; is_complete: boolean };
+type UnitCostInfo = { unit_cost: number | null; base_unit: string; is_complete: boolean; incomplete_reason?: string | null };
 
 export function IngredientsPanel({
   ingredients,
@@ -33,17 +33,18 @@ export function IngredientsPanel({
     async function loadCosts() {
       const supabase = createClient();
       const results = await Promise.all(
-        ingredients.map((ing) =>
-          supabase.rpc("ingredient_unit_cost", { p_ingredient_id: ing.id }).then(({ data }) => ({
-            id: ing.id,
-            info: data?.[0] as UnitCostInfo | undefined,
-          }))
-        )
+        ingredients.map(async (ing) => {
+          const [{ data }, { data: reason }] = await Promise.all([
+            supabase.rpc("ingredient_unit_cost", { p_ingredient_id: ing.id }),
+            supabase.rpc("ingredient_incomplete_reason", { p_ingredient_id: ing.id }),
+          ]);
+          return { id: ing.id, info: data?.[0] as UnitCostInfo | undefined, reason: reason as string | null };
+        })
       );
       if (cancelled) return;
       const map: Record<string, UnitCostInfo> = {};
       for (const r of results) {
-        if (r.info) map[r.id] = r.info;
+        if (r.info) map[r.id] = { ...r.info, incomplete_reason: r.reason };
       }
       setUnitCosts(map);
     }
@@ -214,7 +215,14 @@ export function IngredientsPanel({
 
                 <div className="ml-auto text-right text-xs">
                   {!uc || !uc.is_complete ? (
-                    <span className="font-bold text-danger">Custo incompleto</span>
+                    <span className="font-bold text-danger">
+                      Custo incompleto
+                      {uc?.incomplete_reason && (
+                        <span className="block font-normal text-[11px] text-danger/80">
+                          {uc.incomplete_reason}
+                        </span>
+                      )}
+                    </span>
                   ) : (
                     <span className="font-bold text-coffee">
                       {uc.unit_cost?.toLocaleString("pt-BR", { maximumFractionDigits: 5 })} / {uc.base_unit}

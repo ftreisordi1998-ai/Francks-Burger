@@ -136,7 +136,15 @@ export function RecipesPanel({
                 </span>
                 <span className="ml-auto text-sm font-bold">
                   {!breakdown || !breakdown.complete ? (
-                    <span className="text-danger">Custo incompleto</span>
+                    <span className="text-danger">
+                      Custo incompleto
+                      {breakdown && (
+                        <span className="block text-xs font-normal text-coffee-soft">
+                          {breakdown.incomplete_reason ?? "Subtotal dos itens calculáveis"}:{" "}
+                          {formatBRL(breakdown.total_cost)}
+                        </span>
+                      )}
+                    </span>
                   ) : (
                     <>
                       {formatBRL(breakdown.total_cost)} total ·{" "}
@@ -188,6 +196,11 @@ export function RecipesPanel({
                       style={{ fontSize: 16 }}
                     />
                   </div>
+                  <YieldMismatchWarning
+                    recipe={recipe}
+                    items={recipeItems.filter((i) => i.recipe_id === recipe.id)}
+                    onFix={(sum) => save(recipe.id, { yield_qty: sum })}
+                  />
                   <textarea
                     defaultValue={recipe.instructions ?? ""}
                     placeholder="Modo de preparo"
@@ -218,5 +231,34 @@ export function RecipesPanel({
         )}
       </div>
     </section>
+  );
+}
+
+/** Soma só os itens cujo unidade bate exatamente com a unidade de
+ * rendimento da receita (ex: todos em "g") — conversão kg/g e l/ml fica a
+ * cargo do cálculo no banco; aqui é só um alerta para o cadastro não ficar
+ * com o rendimento desatualizado depois de editar as quantidades. */
+function YieldMismatchWarning({
+  recipe,
+  items,
+  onFix,
+}: {
+  recipe: CostRecipe;
+  items: CostRecipeItem[];
+  onFix: (sum: number) => void;
+}) {
+  if (!recipe.yield_unit || recipe.yield_qty == null) return null;
+  const matching = items.filter((i) => i.unit === recipe.yield_unit);
+  if (matching.length !== items.length || items.length === 0) return null;
+  const sum = matching.reduce((acc, i) => acc + i.qty, 0);
+  if (Math.abs(sum - recipe.yield_qty) < 0.001) return null;
+  return (
+    <p className="rounded-lg bg-warning-bg px-3 py-2 text-xs font-semibold text-warning">
+      Os itens somam {sum} {recipe.yield_unit}, mas o rendimento cadastrado é {recipe.yield_qty}{" "}
+      {recipe.yield_unit}. Isso distorce o custo por {recipe.yield_unit} desta receita.{" "}
+      <button onClick={() => onFix(sum)} className="underline">
+        Usar {sum} {recipe.yield_unit} como rendimento
+      </button>
+    </p>
   );
 }

@@ -194,7 +194,14 @@ export function SimulationPanel({
 
         <div className="rounded-xl bg-cream-soft p-3 text-sm">
           {unitCost == null ? (
-            <p className="font-bold text-danger">Custo incompleto — alguns insumos desta ficha ainda não têm preço completo.</p>
+            <p className="font-bold text-danger">
+              Custo incompleto — alguns insumos desta ficha ainda não têm preço completo.
+              {breakdown && (
+                <span className="block font-normal text-coffee-soft">
+                  Subtotal dos itens calculáveis: {formatBRL(breakdown.direct_cost)}
+                </span>
+              )}
+            </p>
           ) : (
             <p className="font-bold text-coffee">
               Custo por unidade: {formatBRL(unitCost)}
