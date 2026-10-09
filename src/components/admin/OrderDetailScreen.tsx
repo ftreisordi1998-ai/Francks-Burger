@@ -301,6 +301,38 @@ export function OrderDetailScreen({
     setShowCancel(false);
   }
 
+  async function reopenOrder() {
+    const ok = await confirmDialog({
+      title: "Reabrir este pedido?",
+      message:
+        "Isso refaz a reserva de estoque e de vaga na janela de horário, e volta o pedido para \"Aguardando confirmação\" — como se fosse um pedido novo.",
+      confirmLabel: "Reabrir pedido",
+    });
+    if (!ok) return;
+    setBusy(true);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("admin_reopen_order", { p_order_id: order.id });
+    if (error) {
+      setBusy(false);
+      const key = error.message.split(":")[0];
+      const message =
+        key === "OUT_OF_STOCK"
+          ? `Não dá pra reabrir: "${error.message.split(":")[1]}" não tem mais estoque suficiente.`
+          : key === "WINDOW_FULL"
+            ? "Não dá pra reabrir: a janela de horário já está lotada."
+            : "Não foi possível reabrir o pedido. Tente novamente em instantes.";
+      await alertDialog({ title: "Não foi possível reabrir", message, tone: "danger" });
+      return;
+    }
+    const { data } = await supabase
+      .from("orders")
+      .select("*, editions(title, prep_date), payment_proofs(id, storage_path, mime_type, size_bytes, created_at)")
+      .eq("id", order.id)
+      .single();
+    if (data) setOrder(data as unknown as AdminOrderRow);
+    setBusy(false);
+  }
+
   async function deleteOrder() {
     const ok = await confirmDialog({
       title: "Excluir este pedido?",
@@ -708,9 +740,14 @@ export function OrderDetailScreen({
         </section>
       )}
 
-      {isCancelled && order.cancel_reason && (
-        <section className="mt-4 rounded-2xl bg-white p-4 text-sm text-coffee-soft">
-          Cancelado: {order.cancel_reason}
+      {isCancelled && (
+        <section className="mt-4 flex flex-col gap-3 rounded-2xl bg-white p-4">
+          {order.cancel_reason && (
+            <p className="text-sm text-coffee-soft">Cancelado: {order.cancel_reason}</p>
+          )}
+          <ActionButton onClick={reopenOrder} disabled={busy}>
+            Reabrir pedido
+          </ActionButton>
         </section>
       )}
 
