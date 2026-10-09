@@ -136,9 +136,23 @@ export function ComponentItemsEditor<T extends ItemRow>({
             />
             <span className="text-xs font-bold">
               {!breakdown || !breakdown.complete ? (
-                <span className="text-danger">Custo incompleto</span>
+                <span className="text-danger" title={breakdown?.incomplete_reason ?? undefined}>
+                  Custo incompleto
+                  {breakdown?.incomplete_reason && (
+                    <span className="block font-normal text-[11px] text-danger/80">
+                      {breakdown.incomplete_reason}
+                    </span>
+                  )}
+                </span>
               ) : (
-                breakdown.line_cost?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                <span className="text-coffee">
+                  {breakdown.line_cost?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  {breakdown.unit_cost != null && (
+                    <span className="block font-normal text-[11px] text-coffee-soft">
+                      {item.qty} {item.unit} × {breakdown.unit_cost.toLocaleString("pt-BR", { maximumFractionDigits: 5 })}/{item.unit}
+                    </span>
+                  )}
+                </span>
               )}
             </span>
             <button
