@@ -131,13 +131,19 @@ export function OrderDetailScreen({
   async function confirmPayment() {
     setBusy(true);
     const supabase = createClient();
-    const { data } = await supabase
-      .from("orders")
-      .update({ payment_status: "paid", payment_confirmed_at: new Date().toISOString() })
-      .eq("id", order.id)
-      .select("*, editions(title, prep_date)")
-      .single();
-    if (data) setOrder(data as unknown as AdminOrderRow);
+    const { error } = await supabase.rpc("confirm_order_payment", {
+      p_order_id: order.id,
+      p_method: order.payment_method,
+      p_confirmed_by: "admin",
+    });
+    if (!error) {
+      const { data } = await supabase
+        .from("orders")
+        .select("*, editions(title, prep_date), payment_proofs(id, storage_path, mime_type, size_bytes, created_at)")
+        .eq("id", order.id)
+        .single();
+      if (data) setOrder(data as unknown as AdminOrderRow);
+    }
     setBusy(false);
   }
 
@@ -396,6 +402,13 @@ export function OrderDetailScreen({
           </Badge>
         )}
       </div>
+
+      {order.payment_status === "paid" && order.payment_confirmed_at && (
+        <p className="mt-1.5 text-xs text-coffee-soft">
+          Pagamento confirmado por {order.payment_confirmed_by === "courier" ? "motoboy" : "admin"} em{" "}
+          {formatDateTime(order.payment_confirmed_at)}
+        </p>
+      )}
 
       {order.payment_method === "pix" && (
         <section className="mt-3 rounded-xl bg-cream-soft px-4 py-3">

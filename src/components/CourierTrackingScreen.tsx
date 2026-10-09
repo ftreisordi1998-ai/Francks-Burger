@@ -19,6 +19,8 @@ type QueuedPosition = {
 
 type PaymentMethod = "pix" | "card" | "cash";
 
+type OrderPaymentStatus = "pending" | "proof_submitted" | "paid" | "refund_pending" | "refunded";
+
 type SessionStop = {
   stop_index: number;
   customer_name: string;
@@ -30,7 +32,15 @@ type SessionStop = {
   payment_method_confirmed: PaymentMethod | null;
   lat: number | null;
   lng: number | null;
+  order_id: string | null;
+  order_payment_status: OrderPaymentStatus | null;
+  order_total_cents: number | null;
+  order_cash_change_for_cents: number | null;
 };
+
+function formatCentsBRL(cents: number): string {
+  return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
 
 const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   pix: "Pix",
@@ -96,6 +106,7 @@ export function CourierTrackingScreen({ token }: { token: string }) {
   const [queuedCount, setQueuedCount] = useState(0);
   const [stops, setStops] = useState<SessionStop[]>([]);
   const [markingStop, setMarkingStop] = useState<number | null>(null);
+  const [confirmingStop, setConfirmingStop] = useState<number | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<Record<number, PaymentMethod>>({});
   const watchIdRef = useRef<number | null>(null);
   const lastUpdateRef = useRef(0);
@@ -166,21 +177,36 @@ export function CourierTrackingScreen({ token }: { token: string }) {
   }, [token]);
 
   async function markDelivered(stopIndex: number) {
-    const stop = stops.find((s) => s.stop_index === stopIndex);
-    const method = selectedMethod[stopIndex] ?? stop?.payment_method_original ?? null;
     setMarkingStop(stopIndex);
     const supabase = createClient();
-    const { error } = await supabase.rpc("mark_stop_delivered", {
+    const { error } = await supabase.rpc("courier_mark_delivered", {
       p_token: token,
       p_stop_index: stopIndex,
-      p_payment_method: method,
     });
     setMarkingStop(null);
     if (!error) {
       setStops((prev) =>
+        prev.map((s) => (s.stop_index === stopIndex ? { ...s, delivered_at: new Date().toISOString() } : s))
+      );
+    }
+  }
+
+  async function confirmPaymentForStop(stopIndex: number) {
+    const stop = stops.find((s) => s.stop_index === stopIndex);
+    const method = selectedMethod[stopIndex] ?? stop?.payment_method_original ?? "pix";
+    setConfirmingStop(stopIndex);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("courier_confirm_payment", {
+      p_token: token,
+      p_stop_index: stopIndex,
+      p_method: method,
+    });
+    setConfirmingStop(null);
+    if (!error) {
+      setStops((prev) =>
         prev.map((s) =>
           s.stop_index === stopIndex
-            ? { ...s, delivered_at: new Date().toISOString(), payment_method_confirmed: method }
+            ? { ...s, payment_method_confirmed: method, order_payment_status: "paid" }
             : s
         )
       );
@@ -401,70 +427,96 @@ export function CourierTrackingScreen({ token }: { token: string }) {
           <p className="px-1 text-xs font-bold uppercase tracking-wide text-white/50">
             {stops.length} entrega{stops.length === 1 ? "" : "s"}
           </p>
-          {stops.map((s) => (
-            <div
-              key={s.stop_index}
-              className={`flex items-start gap-3 rounded-xl p-3 ${s.delivered_at ? "bg-success/10" : "bg-white/10"}`}
-            >
-              <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                  s.delivered_at ? "bg-success text-white" : "bg-white/20 text-white"
-                }`}
+          {stops.map((s) => {
+            const isPaid = s.order_payment_status === "paid";
+            return (
+              <div
+                key={s.stop_index}
+                className={`flex flex-col gap-2.5 rounded-xl p-3 ${s.delivered_at ? "bg-success/10" : "bg-white/10"}`}
               >
-                {s.delivered_at ? "✓" : s.stop_index}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <p className="truncate text-sm font-bold text-white">{s.customer_name}</p>
-                  {s.lat !== null && s.lng !== null && (
-                    <a
-                      href={wazeUrl(s.lat, s.lng)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/15"
-                      aria-label="Abrir no Waze"
-                      title="Abrir no Waze"
+                <div className="flex items-start gap-3">
+                  <span
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                      s.delivered_at ? "bg-success text-white" : "bg-white/20 text-white"
+                    }`}
+                  >
+                    {s.delivered_at ? "✓" : s.stop_index}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="truncate text-sm font-bold text-white">{s.customer_name}</p>
+                      {s.lat !== null && s.lng !== null && (
+                        <a
+                          href={wazeUrl(s.lat, s.lng)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/15"
+                          aria-label="Abrir no Waze"
+                          title="Abrir no Waze"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7ab7ff" strokeWidth="2">
+                            <path d="M12 2C7 2 3 6 3 11c0 5 6 10 9 11 3-1 9-6 9-11 0-5-4-9-9-9Z" strokeLinejoin="round" />
+                            <circle cx="12" cy="11" r="2.5" fill="#7ab7ff" stroke="none" />
+                          </svg>
+                        </a>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-white/60">{s.address}</p>
+                    {s.items && <p className="truncate text-xs text-white/50">{s.items}</p>}
+                  </div>
+                  {!s.delivered_at && (
+                    <button
+                      onClick={() => markDelivered(s.stop_index)}
+                      disabled={markingStop === s.stop_index}
+                      className="shrink-0 rounded-full bg-orange px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7ab7ff" strokeWidth="2">
-                        <path d="M12 2C7 2 3 6 3 11c0 5 6 10 9 11 3-1 9-6 9-11 0-5-4-9-9-9Z" strokeLinejoin="round" />
-                        <circle cx="12" cy="11" r="2.5" fill="#7ab7ff" stroke="none" />
-                      </svg>
-                    </a>
+                      {markingStop === s.stop_index ? "…" : "Entregue"}
+                    </button>
                   )}
                 </div>
-                <p className="truncate text-xs text-white/60">{s.address}</p>
-                {s.items && <p className="truncate text-xs text-white/50">{s.items}</p>}
-                {s.delivered_at ? (
-                  s.payment_method_confirmed && (
-                    <p className="mt-1 text-xs text-success">
+
+                <div className={`rounded-lg px-2.5 py-2 ${isPaid ? "bg-success/15" : "bg-white/10"}`}>
+                  {isPaid ? (
+                    <p className="text-xs font-extrabold text-success">PAGO — NÃO COBRAR</p>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {s.order_total_cents !== null && (
+                        <span className="text-xs font-bold text-warning">
+                          A cobrar: {formatCentsBRL(s.order_total_cents)}
+                          {s.order_cash_change_for_cents
+                            ? ` · troco p/ ${formatCentsBRL(s.order_cash_change_for_cents)}`
+                            : ""}
+                        </span>
+                      )}
+                      <select
+                        value={selectedMethod[s.stop_index] ?? s.payment_method_original ?? "pix"}
+                        onChange={(e) =>
+                          setSelectedMethod((prev) => ({ ...prev, [s.stop_index]: e.target.value as PaymentMethod }))
+                        }
+                        className="min-h-8 rounded-lg border border-white/20 bg-white/10 px-2 text-xs font-semibold text-white"
+                        style={{ fontSize: 14 }}
+                      >
+                        <option className="text-coffee" value="pix">Pix</option>
+                        <option className="text-coffee" value="card">Cartão</option>
+                        <option className="text-coffee" value="cash">Dinheiro</option>
+                      </select>
+                      <button
+                        onClick={() => confirmPaymentForStop(s.stop_index)}
+                        disabled={confirmingStop === s.stop_index}
+                        className="min-h-8 rounded-full bg-success px-3 text-xs font-bold text-white disabled:opacity-50"
+                      >
+                        {confirmingStop === s.stop_index ? "…" : "Confirmar pagamento"}
+                      </button>
+                    </div>
+                  )}
+                  {isPaid && s.payment_method_confirmed && (
+                    <p className="mt-0.5 text-[11px] text-success/80">
                       Recebido em {PAYMENT_METHOD_LABEL[s.payment_method_confirmed]}
                     </p>
-                  )
-                ) : (
-                  <select
-                    value={selectedMethod[s.stop_index] ?? s.payment_method_original ?? "pix"}
-                    onChange={(e) =>
-                      setSelectedMethod((prev) => ({ ...prev, [s.stop_index]: e.target.value as PaymentMethod }))
-                    }
-                    className="mt-1.5 min-h-8 rounded-lg border border-white/20 bg-white/10 px-2 text-xs font-semibold text-white"
-                    style={{ fontSize: 14 }}
-                  >
-                    <option className="text-coffee" value="pix">Pix</option>
-                    <option className="text-coffee" value="card">Cartão</option>
-                    <option className="text-coffee" value="cash">Dinheiro</option>
-                  </select>
-                )}
+                  )}
+                </div>
               </div>
-              {!s.delivered_at && (
-                <button
-                  onClick={() => markDelivered(s.stop_index)}
-                  disabled={markingStop === s.stop_index}
-                  className="shrink-0 rounded-full bg-orange px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
-                >
-                  {markingStop === s.stop_index ? "…" : "Entregue"}
-                </button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

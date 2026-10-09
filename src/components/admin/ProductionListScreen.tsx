@@ -6,7 +6,15 @@ import { Badge } from "@/components/Badge";
 import { buildCustomerWhatsAppUrl } from "@/lib/contact";
 import { useDialog } from "@/lib/dialog-context";
 import { createClient } from "@/lib/supabase/client";
-import { ORDER_STATUS_FLOW, ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/status";
+import {
+  ORDER_STATUS_FLOW,
+  ORDER_STATUS_LABEL,
+  ORDER_STATUS_TONE,
+  PAYMENT_METHOD_LABEL,
+  PAYMENT_STATUS_LABEL,
+} from "@/lib/status";
+import { formatCents, formatDateTime } from "@/lib/format";
+import { getWindowColor, WINDOW_COLOR_BADGE_CLASS, WINDOW_COLOR_BORDER_CLASS } from "@/lib/window-color";
 import type {
   EditionOption,
   FulfillmentType,
@@ -30,9 +38,22 @@ interface ProductionOrder {
   fulfillment_type: FulfillmentType;
   window_id: string | null;
   window_label_snapshot: string;
+  address_street: string | null;
+  address_number: string | null;
+  address_complement: string | null;
+  address_reference: string | null;
+  neighborhood_name_snapshot: string | null;
+  notes: string | null;
+  subtotal_cents: number;
+  delivery_fee_cents: number;
+  total_cents: number;
+  cash_change_for_cents: number | null;
   order_status: OrderStatus;
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
+  payment_confirmed_at: string | null;
+  payment_confirmed_by: string | null;
+  delivered_at: string | null;
   cancel_reason: string | null;
   created_at: string;
   order_items: ProductionItem[];
@@ -92,7 +113,7 @@ export function ProductionListScreen({
       const { data } = await supabase
         .from("orders")
         .select(
-          "id, customer_name, whatsapp, fulfillment_type, window_id, window_label_snapshot, order_status, payment_method, payment_status, cancel_reason, created_at, order_items(product_name_snapshot, doneness, customer_note, qty)"
+          "id, customer_name, whatsapp, fulfillment_type, window_id, window_label_snapshot, address_street, address_number, address_complement, address_reference, neighborhood_name_snapshot, notes, subtotal_cents, delivery_fee_cents, total_cents, cash_change_for_cents, order_status, payment_method, payment_status, payment_confirmed_at, payment_confirmed_by, delivered_at, cancel_reason, created_at, order_items(product_name_snapshot, doneness, customer_note, qty)"
         )
         .eq("edition_id", selectedEditionId)
         .order("created_at", { ascending: true });
@@ -144,10 +165,12 @@ export function ProductionListScreen({
     }
     setMovingId(order.id);
     const supabase = createClient();
-    const { error } = await supabase.from("orders").update({ order_status: next }).eq("id", order.id);
+    const patch: { order_status: OrderStatus; delivered_at?: string } =
+      next === "delivered" ? { order_status: next, delivered_at: order.delivered_at ?? new Date().toISOString() } : { order_status: next };
+    const { error } = await supabase.from("orders").update(patch).eq("id", order.id);
     setMovingId(null);
     if (!error) {
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, order_status: next } : o)));
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, ...patch } : o)));
       if (next === "confirmed") {
         fetch("/api/push/send", {
           method: "POST",
@@ -155,6 +178,26 @@ export function ProductionListScreen({
           body: JSON.stringify({ orderId: order.id }),
         }).catch(() => {});
       }
+    }
+  }
+
+  async function confirmPayment(order: ProductionOrder) {
+    setMovingId(order.id);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("confirm_order_payment", {
+      p_order_id: order.id,
+      p_method: order.payment_method,
+      p_confirmed_by: "admin",
+    });
+    setMovingId(null);
+    if (!error) {
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === order.id
+            ? { ...o, payment_status: "paid", payment_confirmed_at: new Date().toISOString(), payment_confirmed_by: "admin" }
+            : o
+        )
+      );
     }
   }
 
@@ -403,29 +446,41 @@ export function ProductionListScreen({
                       const prevStatus = ORDER_STATUS_FLOW[statusIdx - 1];
                       const isDragging = drag?.order.id === order.id;
                       const isMoving = movingId === order.id;
+                      const windowColor = getWindowColor(order.window_label_snapshot);
+                      const borderClass = windowColor ? WINDOW_COLOR_BORDER_CLASS[windowColor] : "border-l-transparent";
                       return (
                         <div
                           key={order.id}
                           onPointerDown={(e) => handleCardPointerDown(e, order)}
-                          className={`flex touch-none flex-col gap-2 rounded-xl bg-white p-3 shadow-sm transition-opacity ${
+                          className={`flex touch-none flex-col gap-2 rounded-xl border-l-4 bg-white p-3 shadow-sm transition-opacity ${borderClass} ${
                             isDragging ? "opacity-30" : "cursor-grab active:cursor-grabbing"
                           }`}
                         >
-                          <div>
-                            <p className="text-sm font-bold text-coffee">{order.customer_name}</p>
-                            <p className="text-xs text-coffee-soft">{order.window_label_snapshot}</p>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-coffee">{order.customer_name}</p>
+                              <p className="text-[11px] text-coffee-soft/70">
+                                #{order.id.slice(0, 8).toUpperCase()}
+                              </p>
+                            </div>
+                            {windowColor ? (
+                              <span
+                                className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${WINDOW_COLOR_BADGE_CLASS[windowColor]}`}
+                              >
+                                {order.window_label_snapshot}
+                              </span>
+                            ) : (
+                              <span className="shrink-0 rounded-full bg-cream-soft px-2 py-0.5 text-[11px] font-bold text-coffee-soft">
+                                {order.window_label_snapshot}
+                              </span>
+                            )}
                           </div>
-                          <ul className="flex flex-col gap-0.5">
-                            {order.order_items.map((item, i) => (
-                              <li key={i} className="text-xs text-coffee-soft">
-                                <span className="font-bold text-coffee">{item.qty}×</span>{" "}
-                                {item.product_name_snapshot}
-                                {item.customer_note && (
-                                  <span className="italic"> · &ldquo;{item.customer_note}&rdquo;</span>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
+
+                          <OrderCardBody order={order} />
+
+                          {(order.order_status === "out_for_delivery" || order.order_status === "delivered") && (
+                            <PaymentInfo order={order} onConfirm={() => confirmPayment(order)} busy={isMoving} />
+                          )}
 
                           {order.order_status === "confirmed" && (
                             <a
@@ -629,6 +684,120 @@ export function ProductionListScreen({
             </section>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+function OrderCardBody({ order }: { order: ProductionOrder }) {
+  const isPrep = order.order_status === "confirmed" || order.order_status === "preparing";
+  const isReady = order.order_status === "ready";
+  const isOut = order.order_status === "out_for_delivery";
+  const isDelivered = order.order_status === "delivered";
+  const showAddress = isReady || isOut || isDelivered;
+  const showNotes = isPrep || isReady || isOut;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-1.5">
+        {order.order_items.map((item, i) => (
+          <li key={i} className="rounded-lg bg-cream-soft/60 px-2 py-1.5 text-xs leading-relaxed text-coffee-soft">
+            <p>
+              <span className="font-bold text-coffee">
+                {item.qty}× {item.product_name_snapshot}
+              </span>{" "}
+              — {item.doneness ?? "Ponto da casa"}
+            </p>
+            {item.customer_note && (
+              <p className="mt-0.5 whitespace-pre-wrap break-words italic text-coffee-soft">
+                &ldquo;{item.customer_note}&rdquo;
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      {showNotes && order.notes && (
+        <p className="whitespace-pre-wrap break-words rounded-lg bg-orange-soft/40 px-2 py-1.5 text-xs text-orange-dark">
+          <span className="font-bold">Obs. do pedido: </span>
+          {order.notes}
+        </p>
+      )}
+
+      {isReady && order.fulfillment_type === "delivery" && (
+        <p className="text-[11px] font-semibold text-orange-dark">Pronto para o motoboy retirar</p>
+      )}
+
+      {showAddress && (
+        <div className="rounded-lg bg-cream-soft px-2 py-1.5 text-xs leading-relaxed text-coffee-soft">
+          {order.fulfillment_type === "delivery" ? (
+            <>
+              <p className="font-semibold text-coffee">
+                {order.address_street}, {order.address_number}
+                {order.address_complement ? ` — ${order.address_complement}` : ""}
+              </p>
+              {order.address_reference && <p>Referência: {order.address_reference}</p>}
+              {order.neighborhood_name_snapshot && <p>{order.neighborhood_name_snapshot}</p>}
+            </>
+          ) : (
+            <p className="font-semibold text-coffee">Retirada no local</p>
+          )}
+          <p>{order.whatsapp}</p>
+        </div>
+      )}
+
+      {isDelivered && order.delivered_at && (
+        <p className="text-[11px] text-coffee-soft">Entregue em {formatDateTime(order.delivered_at)}</p>
+      )}
+    </div>
+  );
+}
+
+function PaymentInfo({
+  order,
+  onConfirm,
+  busy,
+}: {
+  order: ProductionOrder;
+  onConfirm: () => void;
+  busy: boolean;
+}) {
+  const isPaid = order.payment_status === "paid";
+  const cashChange = order.cash_change_for_cents;
+  const troco = cashChange !== null && cashChange !== undefined ? cashChange - order.total_cents : null;
+
+  return (
+    <div className={`flex flex-col gap-1.5 rounded-lg px-2.5 py-2 text-xs ${isPaid ? "bg-success-bg" : "bg-warning-bg"}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold text-coffee">{PAYMENT_METHOD_LABEL[order.payment_method]}</span>
+        <span className={`font-bold ${isPaid ? "text-success" : "text-warning"}`}>
+          {PAYMENT_STATUS_LABEL[order.payment_status]}
+        </span>
+      </div>
+      {isPaid ? (
+        <p className="font-extrabold text-success">PAGO — NÃO COBRAR</p>
+      ) : (
+        <>
+          <p className="font-extrabold text-warning">A cobrar: {formatCents(order.total_cents)}</p>
+          {order.payment_method === "cash" && troco !== null && troco > 0 && (
+            <p>
+              Troco para {formatCents(cashChange!)} → troco de {formatCents(troco)}
+            </p>
+          )}
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={onConfirm}
+            disabled={busy}
+            className="mt-1 min-h-9 rounded-lg bg-orange px-2.5 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+          >
+            {busy ? "Confirmando…" : "Confirmar pagamento recebido"}
+          </button>
+        </>
+      )}
+      {order.order_status === "delivered" && (
+        <p className="text-[11px] text-coffee-soft">
+          {isPaid ? "Lançado no financeiro automaticamente" : "Pendente — ainda não lançado no financeiro"}
+        </p>
       )}
     </div>
   );
