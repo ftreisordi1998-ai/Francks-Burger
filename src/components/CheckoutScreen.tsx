@@ -512,8 +512,12 @@ export function CheckoutScreen({
                 onChange={(e) => setNotes(e.target.value)}
                 rows={2}
                 className="input resize-none"
-                placeholder="Ponto do burger, alguma restrição, etc."
+                placeholder="Ex: prefiro que chegue mais perto das 18h, sem cebola, etc."
               />
+              <span className="text-xs leading-snug text-coffee-soft">
+                Quer a entrega mais perto do início ou do fim da janela escolhida? Escreva aqui —
+                a gente tenta encaixar.
+              </span>
             </Field>
           </section>
         </div>
