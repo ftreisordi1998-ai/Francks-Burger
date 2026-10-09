@@ -315,6 +315,157 @@ export interface EditionOption {
   prep_date: string;
 }
 
+export type PurchaseUnit = "kg" | "g" | "l" | "ml" | "unidade";
+export type PriceStatus = "confirmado" | "aproximado" | "estimado" | "pendente";
+
+export interface CostIngredient {
+  id: string;
+  name: string;
+  purchase_price: number;
+  purchase_qty: number | null;
+  purchase_unit: PurchaseUnit;
+  yield_qty: number | null;
+  yield_unit: string | null;
+  yield_is_estimated: boolean;
+  price_status: PriceStatus;
+  notes: string | null;
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type RecipeItemComponentType = "ingredient" | "recipe";
+
+export interface CostRecipe {
+  id: string;
+  name: string;
+  category: string | null;
+  instructions: string | null;
+  notes: string | null;
+  yield_qty: number | null;
+  yield_unit: string | null;
+  status: "rascunho" | "completa";
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CostRecipeItem {
+  id: string;
+  recipe_id: string;
+  component_type: RecipeItemComponentType;
+  ingredient_id: string | null;
+  sub_recipe_id: string | null;
+  qty: number;
+  unit: string;
+  sort_order: number;
+}
+
+export interface CostBurger {
+  id: string;
+  name: string;
+  reference_price: number;
+  linked_product_id: string | null;
+  notes: string | null;
+  status: "rascunho" | "completa";
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CostBurgerItem {
+  id: string;
+  burger_id: string;
+  component_type: RecipeItemComponentType;
+  ingredient_id: string | null;
+  sub_recipe_id: string | null;
+  qty: number;
+  unit: string;
+  sort_order: number;
+}
+
+export interface CostBreakdownItem {
+  id: string;
+  name: string;
+  type: RecipeItemComponentType;
+  qty: number;
+  unit: string;
+  unit_cost: number | null;
+  line_cost: number | null;
+  complete: boolean;
+}
+
+export interface CostBreakdown {
+  recipe_id?: string;
+  burger_id?: string;
+  name: string;
+  items: CostBreakdownItem[];
+  total_cost?: number;
+  direct_cost?: number;
+  yield_qty?: number;
+  yield_unit?: string;
+  cost_per_yield_unit?: number;
+  reference_price?: number | null;
+  complete: boolean;
+}
+
+export interface CostProductionExpense {
+  id: string;
+  name: string;
+  amount: number;
+  planned_qty: number;
+  notes: string | null;
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CostFixedExpense {
+  id: string;
+  name: string;
+  amount: number;
+  planned_monthly_qty: number | null;
+  notes: string | null;
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CostFeeType = "percentual" | "fixo";
+
+export interface CostFee {
+  id: string;
+  name: string;
+  fee_type: CostFeeType;
+  value: number;
+  notes: string | null;
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CostSimulationSnapshot {
+  burgerId: string | null;
+  burgerName: string;
+  unitCost: number | null;
+  costComplete: boolean;
+  producedQty: number;
+  soldQty: number;
+  salePrice: number | null;
+  feeId: string | null;
+  feeLabel: string | null;
+  targetMarginPercent: number | null;
+  suggestedPriceWithFee: number | null;
+  suggestedPriceWithoutFee: number | null;
+}
+
+export interface CostSimulation {
+  id: string;
+  name: string;
+  snapshot: CostSimulationSnapshot;
+  created_at: string;
+}
+
 export interface CartItem {
   lineId: string;
   productId: string;
