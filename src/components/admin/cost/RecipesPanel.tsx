@@ -122,26 +122,32 @@ export function RecipesPanel({
           const recipeOptionsForThis = recipes
             .filter((r) => r.id !== recipe.id)
             .map((r) => ({ id: r.id, name: r.name }));
+          const itemCount = recipeItems.filter((i) => i.recipe_id === recipe.id).length;
           return (
-            <div key={recipe.id} className="rounded-xl bg-cream-soft p-3">
-              <div className="flex flex-wrap items-center gap-2">
+            <div key={recipe.id} className="rounded-xl border border-coffee/10 bg-cream-soft p-3.5">
+              <div className="flex flex-wrap items-start gap-2">
                 <button
                   onClick={() => setExpandedId(expanded ? null : recipe.id)}
-                  className="text-sm font-bold text-coffee"
+                  className="flex flex-col items-start text-left"
                 >
-                  {expanded ? "▾" : "▸"} {recipe.name}
+                  <span className="text-sm font-extrabold text-coffee">
+                    {expanded ? "▾" : "▸"} {recipe.name}
+                  </span>
+                  <span className="text-xs text-coffee-soft">
+                    {itemCount > 0 ? `${itemCount} ingrediente${itemCount > 1 ? "s" : ""}` : "sem ingredientes"}
+                    {" · "}
+                    {recipe.yield_qty != null ? `rende ${recipe.yield_qty} ${recipe.yield_unit}` : "sem rendimento definido"}
+                  </span>
                 </button>
-                <span className="text-xs text-coffee-soft">
-                  {recipe.yield_qty != null ? `rende ${recipe.yield_qty} ${recipe.yield_unit}` : "sem rendimento definido"}
-                </span>
-                <span className="ml-auto text-sm font-bold">
+                <span className="ml-auto text-right text-sm font-bold">
                   {!breakdown || !breakdown.complete ? (
                     <span className="text-danger">
                       Custo incompleto
                       {breakdown && (
                         <span className="block text-xs font-normal text-coffee-soft">
-                          {breakdown.incomplete_reason ?? "Subtotal dos itens calculáveis"}:{" "}
-                          {formatBRL(breakdown.total_cost)}
+                          {breakdown.incomplete_reason ?? "Subtotal dos itens calculáveis"}
+                          {breakdown.incomplete_reason !== "Nenhum ingrediente cadastrado para este preparo" &&
+                            `: ${formatBRL(breakdown.total_cost)}`}
                         </span>
                       )}
                     </span>
@@ -164,50 +170,66 @@ export function RecipesPanel({
               </div>
 
               {expanded && (
-                <div className="mt-3 flex flex-col gap-3">
+                <div className="mt-3 flex flex-col gap-4 rounded-xl bg-white p-3">
                   <div className="flex flex-wrap gap-2">
-                    <input
-                      defaultValue={recipe.name}
-                      onBlur={(e) => save(recipe.id, { name: e.target.value })}
-                      className="min-h-11 flex-1 min-w-[160px] rounded-lg bg-white px-3 py-2 text-sm font-semibold"
-                      style={{ fontSize: 16 }}
-                    />
-                    <input
-                      defaultValue={recipe.category ?? ""}
-                      placeholder="Categoria"
-                      onBlur={(e) => save(recipe.id, { category: e.target.value || null })}
-                      className="min-h-11 w-40 rounded-lg bg-white px-3 py-2 text-sm"
-                      style={{ fontSize: 16 }}
-                    />
-                    <input
-                      type="number"
-                      step="0.0001"
-                      defaultValue={recipe.yield_qty ?? ""}
-                      placeholder="Rendimento"
-                      onBlur={(e) => save(recipe.id, { yield_qty: e.target.value === "" ? null : Number(e.target.value) })}
-                      className="min-h-11 w-28 rounded-lg bg-white px-2 py-1.5 text-sm"
-                      style={{ fontSize: 16 }}
-                    />
-                    <input
-                      defaultValue={recipe.yield_unit ?? ""}
-                      placeholder="Unidade"
-                      onBlur={(e) => save(recipe.id, { yield_unit: e.target.value || null })}
-                      className="min-h-11 w-24 rounded-lg bg-white px-2 py-1.5 text-sm"
-                      style={{ fontSize: 16 }}
-                    />
+                    <label className="flex min-w-[160px] flex-1 flex-col gap-1 text-[11px] font-bold uppercase tracking-wide text-coffee-soft">
+                      Nome
+                      <input
+                        defaultValue={recipe.name}
+                        onBlur={(e) => save(recipe.id, { name: e.target.value })}
+                        className="min-h-11 rounded-lg bg-cream-soft px-3 py-2 text-sm font-semibold normal-case text-coffee"
+                        style={{ fontSize: 16 }}
+                      />
+                    </label>
+                    <label className="flex w-40 flex-col gap-1 text-[11px] font-bold uppercase tracking-wide text-coffee-soft">
+                      Categoria
+                      <input
+                        defaultValue={recipe.category ?? ""}
+                        placeholder="Ex: molho, base"
+                        onBlur={(e) => save(recipe.id, { category: e.target.value || null })}
+                        className="min-h-11 rounded-lg bg-cream-soft px-3 py-2 text-sm normal-case text-coffee"
+                        style={{ fontSize: 16 }}
+                      />
+                    </label>
+                    <label className="flex w-28 flex-col gap-1 text-[11px] font-bold uppercase tracking-wide text-coffee-soft">
+                      Rendimento
+                      <input
+                        type="number"
+                        step="0.0001"
+                        defaultValue={recipe.yield_qty ?? ""}
+                        placeholder="Qtd."
+                        onBlur={(e) => save(recipe.id, { yield_qty: e.target.value === "" ? null : Number(e.target.value) })}
+                        className="min-h-11 rounded-lg bg-cream-soft px-2 py-1.5 text-sm normal-case text-coffee"
+                        style={{ fontSize: 16 }}
+                      />
+                    </label>
+                    <label className="flex w-24 flex-col gap-1 text-[11px] font-bold uppercase tracking-wide text-coffee-soft">
+                      Unidade
+                      <input
+                        defaultValue={recipe.yield_unit ?? ""}
+                        placeholder="g, ml..."
+                        onBlur={(e) => save(recipe.id, { yield_unit: e.target.value || null })}
+                        className="min-h-11 rounded-lg bg-cream-soft px-2 py-1.5 text-sm normal-case text-coffee"
+                        style={{ fontSize: 16 }}
+                      />
+                    </label>
                   </div>
                   <YieldMismatchWarning
                     recipe={recipe}
                     items={recipeItems.filter((i) => i.recipe_id === recipe.id)}
                     onFix={(sum) => save(recipe.id, { yield_qty: sum })}
                   />
-                  <textarea
-                    defaultValue={recipe.instructions ?? ""}
-                    placeholder="Modo de preparo"
-                    onBlur={(e) => save(recipe.id, { instructions: e.target.value || null })}
-                    className="min-h-16 rounded-lg bg-white px-3 py-2 text-sm"
-                    style={{ fontSize: 16 }}
-                  />
+                  <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wide text-coffee-soft">
+                    Modo de preparo (texto livre — não entra no cálculo de custo)
+                    <textarea
+                      defaultValue={recipe.instructions ?? ""}
+                      placeholder="Passo a passo do preparo"
+                      onBlur={(e) => save(recipe.id, { instructions: e.target.value || null })}
+                      className="min-h-16 rounded-lg bg-cream-soft px-3 py-2 text-sm normal-case text-coffee"
+                      style={{ fontSize: 16 }}
+                    />
+                  </label>
+                  <div className="h-px bg-coffee/10" />
                   <ComponentItemsEditor
                     table="cost_recipe_items"
                     parentField="recipe_id"
