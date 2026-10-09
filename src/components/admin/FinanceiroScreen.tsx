@@ -61,6 +61,18 @@ function inputToCents(value: string): number {
   return Math.round(Number(value.replace(",", ".")) * 100) || 0;
 }
 
+const PAYMENT_TO_FINANCE: Record<PaymentMethod, FinancePaymentMethod> = {
+  pix: "pix",
+  cash: "dinheiro",
+  card: "cartao",
+};
+
+const FINANCE_TO_PAYMENT: Record<FinancePaymentMethod, PaymentMethod> = {
+  pix: "pix",
+  dinheiro: "cash",
+  cartao: "card",
+};
+
 export function FinanceiroScreen({
   editions,
   selectedEditionId,
@@ -99,9 +111,7 @@ export function FinanceiroScreen({
   const [incomeMethod, setIncomeMethod] = useState<FinancePaymentMethod>("pix");
   const [savingIncome, setSavingIncome] = useState(false);
   const [openWindowId, setOpenWindowId] = useState<string | null>(null);
-  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
-  const [confirmMethod, setConfirmMethod] = useState<PaymentMethod>("pix");
-  const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   const registeredOrderIds = useMemo(
     () => new Set(incomes.map((i) => i.order_id).filter((id): id is string => Boolean(id))),
@@ -119,35 +129,18 @@ export function FinanceiroScreen({
     return map;
   }, [pendingOrders, registeredOrderIds]);
 
-  function toggleOrderForConfirm(order: PendingOrderRow) {
-    if (expandedOrderId === order.id) {
-      setExpandedOrderId(null);
+  function selectOrderForConfirm(order: PendingOrderRow) {
+    if (selectedOrderId === order.id) {
+      setSelectedOrderId(null);
+      setIncomeDesc("");
+      setIncomeAmount("");
       return;
     }
-    setExpandedOrderId(order.id);
+    setSelectedOrderId(order.id);
+    setIncomeDesc(order.customer_name);
+    setIncomeAmount(centsToInput(order.total_cents));
     const confirmed = confirmedPaymentByOrderId[order.id] as PaymentMethod | undefined;
-    setConfirmMethod(confirmed ?? order.payment_method);
-  }
-
-  async function confirmOrderPayment(order: PendingOrderRow) {
-    setConfirmingOrderId(order.id);
-    const supabase = createClient();
-    const { error } = await supabase.rpc("confirm_order_payment", {
-      p_order_id: order.id,
-      p_method: confirmMethod,
-      p_confirmed_by: "admin",
-    });
-    setConfirmingOrderId(null);
-    if (error) {
-      await alertDialog({
-        title: "Não foi possível confirmar",
-        message: "Tente novamente em instantes.",
-        tone: "danger",
-      });
-      return;
-    }
-    setExpandedOrderId(null);
-    router.refresh();
+    setIncomeMethod(PAYMENT_TO_FINANCE[confirmed ?? order.payment_method]);
   }
 
   const [expenses, setExpenses] = useState(initialExpenses);
@@ -179,6 +172,30 @@ export function FinanceiroScreen({
     const amount_cents = inputToCents(incomeAmount);
     if (!incomeDesc.trim() || amount_cents <= 0) return;
     setSavingIncome(true);
+
+    if (selectedOrderId) {
+      const supabase = createClient();
+      const { error } = await supabase.rpc("confirm_order_payment", {
+        p_order_id: selectedOrderId,
+        p_method: FINANCE_TO_PAYMENT[incomeMethod],
+        p_confirmed_by: "admin",
+      });
+      setSavingIncome(false);
+      if (error) {
+        await alertDialog({
+          title: "Não foi possível confirmar",
+          message: "Tente novamente em instantes.",
+          tone: "danger",
+        });
+        return;
+      }
+      setSelectedOrderId(null);
+      setIncomeDesc("");
+      setIncomeAmount("");
+      router.refresh();
+      return;
+    }
+
     const supabase = createClient();
     const { data, error } = await supabase
       .from("finance_incomes")
@@ -257,6 +274,37 @@ export function FinanceiroScreen({
     const { error } = await supabase.from("finance_expenses").delete().eq("id", expense.id);
     if (!error) setExpenses((prev) => prev.filter((e) => e.id !== expense.id));
     else await alertDialog({ title: "Não foi possível excluir", message: "Tente novamente.", tone: "danger" });
+  }
+
+  async function unconfirmOrderPayment(orderId: string, customerName: string) {
+    const ok = await confirmDialog({
+      title: `Remover recebimento de "${customerName}"?`,
+      message: "O pedido volta para \"em aberto\" e pode ser confirmado de novo depois.",
+      confirmLabel: "Remover",
+      destructive: true,
+    });
+    if (!ok) return;
+    const supabase = createClient();
+    const { error } = await supabase.rpc("admin_unconfirm_order_payment", { p_order_id: orderId });
+    if (error) {
+      await alertDialog({ title: "Não foi possível remover", message: "Tente novamente em instantes.", tone: "danger" });
+      return;
+    }
+    router.refresh();
+  }
+
+  async function deleteLedgerRow(row: (typeof ledger)[number]) {
+    if (row.kind === "Pedido do site") {
+      await unconfirmOrderPayment(row.id.slice("order-".length), row.description);
+      return;
+    }
+    if (row.kind === "Entrada manual") {
+      const income = incomes.find((i) => i.id === row.id.slice("income-".length));
+      if (income) await deleteIncome(income);
+      return;
+    }
+    const expense = expenses.find((e) => e.id === row.id.slice("expense-".length));
+    if (expense) await deleteExpense(expense);
   }
 
   const usedSuggestions = useMemo(
@@ -501,45 +549,25 @@ export function FinanceiroScreen({
                       ) : (
                         windowPending.map((order) => {
                           const confirmed = confirmedPaymentByOrderId[order.id] as PaymentMethod | undefined;
-                          const isExpanded = expandedOrderId === order.id;
+                          const isSelected = selectedOrderId === order.id;
                           return (
-                            <div key={order.id} className="rounded-lg">
-                              <button
-                                onClick={() => toggleOrderForConfirm(order)}
-                                className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                                  isExpanded ? "bg-orange-soft/40" : "hover:bg-cream-soft"
-                                }`}
-                              >
-                                <div>
-                                  <p className="font-bold text-coffee">{order.customer_name}</p>
-                                  <p className="text-xs text-coffee-soft">
-                                    {PAYMENT_METHOD_LABEL[confirmed ?? order.payment_method]}
-                                    {confirmed && confirmed !== order.payment_method && " · confirmado pelo motoboy"}
-                                  </p>
-                                </div>
-                                <span className="font-bold text-coffee">{formatCents(order.total_cents)}</span>
-                              </button>
-                              {isExpanded && (
-                                <div className="flex flex-wrap items-center gap-2 rounded-lg bg-cream-soft px-3 py-2.5">
-                                  <select
-                                    value={confirmMethod}
-                                    onChange={(e) => setConfirmMethod(e.target.value as PaymentMethod)}
-                                    className="min-h-9 rounded-lg border border-coffee/10 bg-white px-2 py-1 text-xs font-semibold"
-                                  >
-                                    <option value="pix">Pix</option>
-                                    <option value="card">Cartão</option>
-                                    <option value="cash">Dinheiro</option>
-                                  </select>
-                                  <button
-                                    onClick={() => confirmOrderPayment(order)}
-                                    disabled={confirmingOrderId === order.id}
-                                    className="min-h-9 rounded-lg bg-orange px-3 text-xs font-bold text-white disabled:opacity-50"
-                                  >
-                                    {confirmingOrderId === order.id ? "Confirmando…" : "Confirmar recebimento"}
-                                  </button>
-                                </div>
-                              )}
-                            </div>
+                            <button
+                              key={order.id}
+                              onClick={() => selectOrderForConfirm(order)}
+                              className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                                isSelected ? "bg-orange-soft/40" : "hover:bg-cream-soft"
+                              }`}
+                            >
+                              <div>
+                                <p className="font-bold text-coffee">{order.customer_name}</p>
+                                <p className="text-xs text-coffee-soft">
+                                  {PAYMENT_METHOD_LABEL[confirmed ?? order.payment_method]}
+                                  {confirmed && confirmed !== order.payment_method && " · confirmado pelo motoboy"}
+                                  {isSelected && " · preencha abaixo e confirme"}
+                                </p>
+                              </div>
+                              <span className="font-bold text-coffee">{formatCents(order.total_cents)}</span>
+                            </button>
                           );
                         })
                       )}
@@ -551,6 +579,12 @@ export function FinanceiroScreen({
           </div>
         )}
 
+        {selectedOrderId && (
+          <p className="-mb-1 rounded-lg bg-orange-soft/50 px-3 py-2 text-xs font-semibold text-orange-dark">
+            Confirmando recebimento do pedido selecionado — ajuste a forma de pagamento se precisar e clique em
+            Confirmar.
+          </p>
+        )}
         <div className="flex flex-col gap-2 rounded-xl bg-cream-soft p-3 sm:flex-row sm:items-end">
           <div className="flex flex-1 flex-col gap-1">
             <label className="text-xs font-bold text-coffee-soft">Descrição</label>
@@ -569,7 +603,8 @@ export function FinanceiroScreen({
               onChange={(e) => setIncomeAmount(e.target.value)}
               inputMode="decimal"
               placeholder="0,00"
-              className="min-h-11 w-28 rounded-lg border border-coffee/10 bg-white px-3 py-2 text-sm"
+              disabled={!!selectedOrderId}
+              className="min-h-11 w-28 rounded-lg border border-coffee/10 bg-white px-3 py-2 text-sm disabled:opacity-60"
               style={{ fontSize: 16 }}
             />
           </div>
@@ -590,7 +625,7 @@ export function FinanceiroScreen({
             disabled={savingIncome}
             className="min-h-11 rounded-lg bg-orange px-4 text-sm font-bold text-white disabled:opacity-50"
           >
-            + Adicionar
+            {selectedOrderId ? "Confirmar recebimento" : "+ Adicionar"}
           </button>
         </div>
         {incomes.length > 0 && (
@@ -769,13 +804,14 @@ export function FinanceiroScreen({
                 <th className="py-2 pr-2">Tipo</th>
                 <th className="py-2 pr-2">Descrição</th>
                 <th className="py-2 pr-2">Detalhe</th>
-                <th className="py-2 text-right">Valor</th>
+                <th className="py-2 pr-2 text-right">Valor</th>
+                <th className="py-2 text-right">&nbsp;</th>
               </tr>
             </thead>
             <tbody>
               {ledger.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-coffee-soft">
+                  <td colSpan={6} className="py-6 text-center text-coffee-soft">
                     Nenhum lançamento ainda.
                   </td>
                 </tr>
@@ -787,9 +823,18 @@ export function FinanceiroScreen({
                   <td className="py-2 pr-2 font-semibold text-coffee">{row.description}</td>
                   <td className="py-2 pr-2 text-xs text-coffee-soft">{row.detail}</td>
                   <td
-                    className={`py-2 text-right font-bold ${row.sign === 1 ? "text-success" : "text-danger"}`}
+                    className={`py-2 pr-2 text-right font-bold ${row.sign === 1 ? "text-success" : "text-danger"}`}
                   >
                     {row.sign === 1 ? "+" : "−"} {formatCents(row.amountCents)}
+                  </td>
+                  <td className="py-2 text-right">
+                    <button
+                      onClick={() => deleteLedgerRow(row)}
+                      aria-label="Remover"
+                      className="min-h-9 rounded-lg bg-danger-bg px-2.5 text-xs font-bold text-danger"
+                    >
+                      ✕
+                    </button>
                   </td>
                 </tr>
               ))}
