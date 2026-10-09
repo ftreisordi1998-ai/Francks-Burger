@@ -50,7 +50,7 @@ export function AdminOrdersScreen({
     async function refetch() {
       const { data } = await supabase
         .from("orders")
-        .select("*, editions(title, prep_date)")
+        .select("*, editions(title, prep_date), payment_proofs(id, storage_path, mime_type, size_bytes, created_at)")
         .order("created_at", { ascending: false })
         .limit(200);
       if (data) setOrders(data as unknown as AdminOrderRow[]);
@@ -236,6 +236,7 @@ export function AdminOrdersScreen({
               </Badge>
               <span className="text-xs text-coffee-soft">
                 {PAYMENT_METHOD_LABEL[order.payment_method]}
+                {order.payment_proofs.length > 0 && " · 📎 comprovante"}
               </span>
             </span>
             <span>

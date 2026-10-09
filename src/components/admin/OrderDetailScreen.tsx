@@ -77,6 +77,7 @@ export function OrderDetailScreen({
   const [savingItems, setSavingItems] = useState(false);
   const [itemsError, setItemsError] = useState<string | null>(null);
   const [markingRefunded, setMarkingRefunded] = useState(false);
+  const [openingProofId, setOpeningProofId] = useState<string | null>(null);
   const router = useRouter();
   const { confirmDialog, alertDialog } = useDialog();
 
@@ -108,6 +109,24 @@ export function OrderDetailScreen({
     }
     return order_.map((name) => groups.get(name)!);
   }, [items]);
+
+  async function openProof(proofId: string, storagePath: string, download: boolean) {
+    setOpeningProofId(proofId);
+    const supabase = createClient();
+    const { data, error } = await supabase.storage
+      .from("payment-proofs")
+      .createSignedUrl(storagePath, 60, download ? { download: true } : undefined);
+    setOpeningProofId(null);
+    if (error || !data) {
+      await alertDialog({
+        title: "Não foi possível abrir o comprovante",
+        message: "Tente novamente em instantes.",
+        tone: "danger",
+      });
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noreferrer");
+  }
 
   async function confirmPayment() {
     setBusy(true);
@@ -346,6 +365,53 @@ export function OrderDetailScreen({
         )}
       </div>
 
+      {order.payment_method === "pix" && (
+        <section className="mt-3 rounded-xl bg-cream-soft px-4 py-3">
+          <p className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">
+            Comprovante de pagamento · Pedido #{order.id.slice(0, 8).toUpperCase()} ·{" "}
+            {formatCents(order.total_cents)}
+          </p>
+          {order.payment_proofs.length === 0 ? (
+            <p className="mt-1.5 text-sm text-coffee-soft">Nenhum comprovante enviado ainda.</p>
+          ) : (
+            <div className="mt-2 flex flex-col gap-2">
+              {order.payment_proofs.map((proof) => (
+                <div
+                  key={proof.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-coffee">
+                      {proof.mime_type === "application/pdf" ? "📄 PDF" : "🖼️ Imagem"} ·{" "}
+                      {(proof.size_bytes / (1024 * 1024)).toFixed(1)} MB
+                    </p>
+                    <p className="text-xs text-coffee-soft">
+                      Enviado em {formatDateTime(proof.created_at)}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openProof(proof.id, proof.storage_path, false)}
+                      disabled={openingProofId === proof.id}
+                      className="rounded-lg bg-orange-soft px-3 py-1.5 text-xs font-bold text-orange-dark disabled:opacity-50"
+                    >
+                      Visualizar
+                    </button>
+                    <button
+                      onClick={() => openProof(proof.id, proof.storage_path, true)}
+                      disabled={openingProofId === proof.id}
+                      className="rounded-lg bg-cream-soft px-3 py-1.5 text-xs font-bold text-coffee disabled:opacity-50"
+                    >
+                      Baixar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {previousOrders.length > 0 && (
         <details className="mt-3 rounded-xl bg-cream-soft px-4 py-3 text-sm">
           <summary className="cursor-pointer font-bold text-coffee">
@@ -569,7 +635,7 @@ export function OrderDetailScreen({
         <section className="mt-4 flex flex-col gap-3 rounded-2xl bg-white p-4">
           <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">Ações</h2>
           <div className="flex flex-wrap gap-2">
-            {order.payment_status === "pending" && (
+            {(order.payment_status === "pending" || order.payment_status === "proof_submitted") && (
               <ActionButton onClick={confirmPayment} disabled={busy}>
                 Confirmar pagamento
               </ActionButton>

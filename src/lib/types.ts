@@ -1,7 +1,7 @@
 export type EditionStatus = "draft" | "open" | "closed";
 export type WindowType = "delivery" | "pickup";
 export type FulfillmentType = "delivery" | "pickup";
-export type PaymentStatus = "pending" | "paid" | "refund_pending" | "refunded";
+export type PaymentStatus = "pending" | "proof_submitted" | "paid" | "refund_pending" | "refunded";
 export type PaymentMethod = "pix" | "card" | "cash";
 export type OrderStatus =
   | "awaiting_confirmation"
@@ -126,6 +126,14 @@ export interface OrderItemView {
   customer_note: string | null;
 }
 
+export interface PaymentProof {
+  id: string;
+  storage_path: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: string;
+}
+
 export interface OrderTrackingView {
   id: string;
   public_token: string;
@@ -181,6 +189,7 @@ export interface AdminOrderRow {
   cancel_reason: string | null;
   confirmation_notified_at: string | null;
   editions: { title: string; prep_date: string } | null;
+  payment_proofs: PaymentProof[];
 }
 
 export type GeocodeStatus = "ok" | "ambiguous" | "failed" | "manual";

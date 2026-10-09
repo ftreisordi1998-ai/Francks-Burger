@@ -15,7 +15,7 @@ export default async function AdminOrderDetailPage({
 
   const { data: order } = await supabase
     .from("orders")
-    .select("*, editions(title, prep_date)")
+    .select("*, editions(title, prep_date), payment_proofs(id, storage_path, mime_type, size_bytes, created_at)")
     .eq("id", id)
     .maybeSingle();
 

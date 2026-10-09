@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import { ensureMaplibreWorker } from "@/lib/maplibre-worker-setup";
 import { useSwipeBack } from "@/lib/useSwipeBack";
 import { PixPayment } from "./PixPayment";
+import { PaymentProofUpload } from "./PaymentProofUpload";
 import { buildStoreWhatsAppUrl } from "@/lib/contact";
 import {
   getExistingPushSubscription,
@@ -33,6 +34,7 @@ const MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 
 export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingView }) {
   const [order, setOrder] = useState(initial);
+  const [justSubmittedProof, setJustSubmittedProof] = useState(false);
   const [pushState, setPushState] = useState<PushCardState>("hidden");
   const [pushBusy, setPushBusy] = useState(false);
   const [deliveryPos, setDeliveryPos] = useState<ActiveDeliveryPosition | null>(null);
@@ -164,7 +166,18 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
     };
   }, [order.public_token]);
 
-  const isPending = order.order_status === "awaiting_confirmation" && order.payment_status === "pending";
+  const isPending =
+    order.payment_status !== "paid" &&
+    order.payment_status !== "refund_pending" &&
+    order.payment_status !== "refunded" &&
+    order.order_status !== "cancelled";
+
+  async function handleProofSubmitted() {
+    setJustSubmittedProof(true);
+    const supabase = createClient();
+    const { data } = await supabase.rpc("get_order_by_token", { p_token: order.public_token });
+    if (data) setOrder(data as OrderTrackingView);
+  }
 
   const groupedItems = useMemo(() => {
     const order_: string[] = [];
@@ -194,6 +207,22 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
           </p>
         </div>
       </div>
+
+      {justSubmittedProof && (
+        <section className="mt-5 rounded-2xl bg-success-bg px-4 py-4">
+          <p className="text-base font-extrabold text-success">Comprovante recebido! 🍔❤️</p>
+          <p className="mt-2 text-sm leading-relaxed text-coffee">
+            Obrigado pela sua encomenda na Franck&rsquo;s Burger! Vamos conferir seu pagamento e
+            preparar tudo com muito carinho para você.
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-coffee">
+            Seu pedido já está registrado. Você pode acompanhar a confirmação por aqui.
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-coffee">
+            Agora é só deixar a fome de burger com a gente! 🔥
+          </p>
+        </section>
+      )}
 
       <div className="mt-5 flex flex-wrap gap-2">
         <Badge tone={ORDER_STATUS_TONE[order.order_status]}>
@@ -330,7 +359,10 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
           {order.payment_method === "pix" && (
             <>
               <h2 className="text-sm font-extrabold text-orange-dark">Pagamento via Pix</h2>
-              {order.pix_key ? (
+              <p className="mt-1 text-xs font-bold uppercase tracking-wide text-orange-dark/80">
+                Pedido #{order.id.slice(0, 8).toUpperCase()}
+              </p>
+              {order.payment_status === "pending" && order.pix_key ? (
                 <>
                   <p className="mt-2 text-sm font-bold text-coffee">
                     Valor: {formatCents(order.total_cents)}
@@ -359,9 +391,13 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
                     tempo.
                   </p>
                 </>
-              ) : (
+              ) : order.payment_status === "pending" ? (
                 <p className="mt-2 text-sm text-coffee-soft">
                   As instruções de pagamento serão enviadas em breve pelo WhatsApp.
+                </p>
+              ) : (
+                <p className="mt-2 text-sm font-semibold text-coffee">
+                  Valor: {formatCents(order.total_cents)} · Comprovante em conferência
                 </p>
               )}
             </>
@@ -399,6 +435,10 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
             </p>
           )}
         </section>
+      )}
+
+      {order.payment_method === "pix" && order.payment_status === "pending" && (
+        <PaymentProofUpload publicToken={order.public_token} onSubmitted={handleProofSubmitted} />
       )}
 
       <a

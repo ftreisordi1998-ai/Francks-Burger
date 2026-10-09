@@ -18,14 +18,16 @@ export const FINANCE_EXPENSE_STATUS_LABEL: Record<FinanceExpenseStatus, string> 
 };
 
 export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
-  pending: "Pagamento pendente",
-  paid: "Pago",
+  pending: "Aguardando pagamento",
+  proof_submitted: "Comprovante enviado — em conferência",
+  paid: "Pagamento confirmado",
   refund_pending: "Reembolso pendente",
   refunded: "Reembolsado",
 };
 
-export const PAYMENT_STATUS_TONE: Record<PaymentStatus, "warning" | "success" | "danger"> = {
+export const PAYMENT_STATUS_TONE: Record<PaymentStatus, "warning" | "success" | "danger" | "info"> = {
   pending: "warning",
+  proof_submitted: "info",
   paid: "success",
   refund_pending: "danger",
   refunded: "danger",

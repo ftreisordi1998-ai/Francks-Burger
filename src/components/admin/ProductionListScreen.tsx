@@ -131,7 +131,7 @@ export function ProductionListScreen({
     if (next === order.order_status) return;
     if (
       order.payment_method === "pix" &&
-      order.payment_status === "pending" &&
+      order.payment_status !== "paid" &&
       (next === "out_for_delivery" || next === "delivered")
     ) {
       const ok = await confirmDialog({
