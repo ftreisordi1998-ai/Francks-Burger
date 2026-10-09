@@ -328,6 +328,14 @@ export function CourierTrackingScreen({ token }: { token: string }) {
     };
   }, [phase]);
 
+  // Sempre a primeira parada ainda sem entrega confirmada, na ordem da rota
+  // planejada — recalculado sozinho a cada "Entregue", então se o motoboy
+  // entregar fora de ordem (ex: a 3 antes da 1), o botão "Navegar" já aponta
+  // pra próxima pendente de verdade, sem precisar refazer a rota manualmente.
+  const nextStop = stops
+    .filter((s) => !s.delivered_at && s.lat !== null && s.lng !== null)
+    .sort((a, b) => a.stop_index - b.stop_index)[0];
+
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-coffee px-6 text-center">
       <div className="flex flex-col items-center gap-1">
@@ -422,6 +430,15 @@ export function CourierTrackingScreen({ token }: { token: string }) {
         </div>
       )}
 
+      {phase === "active" && nextStop && (
+        <a
+          href={wazeUrl(nextStop.lat!, nextStop.lng!)}
+          className="flex w-full max-w-sm min-h-14 items-center justify-center gap-2 rounded-2xl bg-orange px-6 text-base font-extrabold text-white shadow-lg active:scale-95"
+        >
+          🧭 Navegar até {nextStop.customer_name.split(/\s+/)[0]}
+        </a>
+      )}
+
       {(phase === "idle" || phase === "active") && stops.length > 0 && (
         <div className="flex w-full max-w-sm flex-col gap-2 overflow-y-auto rounded-2xl bg-white/5 p-3 text-left">
           <p className="px-1 text-xs font-bold uppercase tracking-wide text-white/50">
@@ -429,15 +446,22 @@ export function CourierTrackingScreen({ token }: { token: string }) {
           </p>
           {stops.map((s) => {
             const isPaid = s.order_payment_status === "paid";
+            const isNext = nextStop?.stop_index === s.stop_index;
             return (
               <div
                 key={s.stop_index}
-                className={`flex flex-col gap-2.5 rounded-xl p-3 ${s.delivered_at ? "bg-success/10" : "bg-white/10"}`}
+                className={`flex flex-col gap-2.5 rounded-xl p-3 ${
+                  s.delivered_at
+                    ? "bg-success/10"
+                    : isNext
+                      ? "bg-orange/15 ring-1 ring-orange/50"
+                      : "bg-white/10"
+                }`}
               >
                 <div className="flex items-start gap-3">
                   <span
                     className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                      s.delivered_at ? "bg-success text-white" : "bg-white/20 text-white"
+                      s.delivered_at ? "bg-success text-white" : isNext ? "bg-orange text-white" : "bg-white/20 text-white"
                     }`}
                   >
                     {s.delivered_at ? "✓" : s.stop_index}
@@ -445,6 +469,11 @@ export function CourierTrackingScreen({ token }: { token: string }) {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <p className="truncate text-sm font-bold text-white">{s.customer_name}</p>
+                      {isNext && (
+                        <span className="shrink-0 rounded-full bg-orange px-1.5 py-0.5 text-[10px] font-extrabold text-white">
+                          PRÓXIMA
+                        </span>
+                      )}
                       {s.lat !== null && s.lng !== null && (
                         <a
                           href={wazeUrl(s.lat, s.lng)}
