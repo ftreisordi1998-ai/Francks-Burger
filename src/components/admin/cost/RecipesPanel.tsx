@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useDialog } from "@/lib/dialog-context";
 import type { CostIngredient, CostRecipe, CostRecipeItem, CostBreakdown } from "@/lib/types";
@@ -221,12 +221,10 @@ export function RecipesPanel({
                   />
                   <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wide text-coffee-soft">
                     Modo de preparo (texto livre — não entra no cálculo de custo)
-                    <textarea
+                    <AutoGrowTextarea
                       defaultValue={recipe.instructions ?? ""}
                       placeholder="Passo a passo do preparo"
                       onBlur={(e) => save(recipe.id, { instructions: e.target.value || null })}
-                      className="min-h-16 rounded-lg bg-cream-soft px-3 py-2 text-sm normal-case text-coffee"
-                      style={{ fontSize: 16 }}
                     />
                   </label>
                   <div className="h-px bg-coffee/10" />
@@ -282,5 +280,42 @@ function YieldMismatchWarning({
         Usar {sum} {recipe.yield_unit} como rendimento
       </button>
     </p>
+  );
+}
+
+/** Textarea que cresce até caber o texto inteiro, sem barra de rolagem
+ * interna — o modo de preparo tem que aparecer completo ao abrir a
+ * receita, tanto no celular quanto no computador. */
+function AutoGrowTextarea({
+  defaultValue,
+  placeholder,
+  onBlur,
+}: {
+  defaultValue: string;
+  placeholder: string;
+  onBlur: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  function resize(el: HTMLTextAreaElement) {
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }
+
+  useEffect(() => {
+    if (ref.current) resize(ref.current);
+  }, []);
+
+  return (
+    <textarea
+      ref={ref}
+      defaultValue={defaultValue}
+      placeholder={placeholder}
+      onBlur={onBlur}
+      onInput={(e) => resize(e.currentTarget)}
+      rows={1}
+      className="min-h-16 resize-none overflow-hidden rounded-lg bg-cream-soft px-3 py-2 text-sm normal-case leading-relaxed text-coffee"
+      style={{ fontSize: 16 }}
+    />
   );
 }
