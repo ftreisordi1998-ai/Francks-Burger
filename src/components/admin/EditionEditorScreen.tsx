@@ -173,7 +173,7 @@ export function EditionEditorScreen({
     .filter((o) => o.payment_status === "paid")
     .reduce((s, o) => s + o.total_cents, 0);
   const totalPending = activeOrders
-    .filter((o) => o.payment_status === "pending")
+    .filter((o) => o.payment_status === "pending" || o.payment_status === "proof_submitted")
     .reduce((s, o) => s + o.total_cents, 0);
   const totalDeliveryFees = activeOrders.reduce((s, o) => s + o.delivery_fee_cents, 0);
 
