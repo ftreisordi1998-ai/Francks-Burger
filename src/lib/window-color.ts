@@ -23,3 +23,26 @@ export const WINDOW_COLOR_BORDER_CLASS: Record<WindowColor, string> = {
   yellow: "border-l-warning",
   green: "border-l-success",
 };
+
+export const WINDOW_COLOR_CARD_CLASS: Record<WindowColor, string> = {
+  red: "bg-danger-bg",
+  yellow: "bg-warning-bg",
+  green: "bg-success-bg",
+};
+
+// Texto só com a cor (sem fundo tingido), pra etiquetas sobre o card já
+// colorido — o chip de fundo (WINDOW_COLOR_BADGE_CLASS) fica invisível
+// quando o card inteiro já é dessa mesma cor.
+export const WINDOW_COLOR_TEXT_CLASS: Record<WindowColor, string> = {
+  red: "text-danger",
+  yellow: "text-warning",
+  green: "text-success",
+};
+
+// Ordena por horário de início da janela (extraído do rótulo), não por
+// ordem de chegada do pedido — janelas sem horário reconhecível vão por
+// último, mantidas na ordem relativa entre si.
+export function windowSortKey(label: string): number {
+  const match = label.match(/(\d{1,2})h/);
+  return match ? Number(match[1]) : 99;
+}

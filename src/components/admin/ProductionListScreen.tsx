@@ -14,7 +14,13 @@ import {
   PAYMENT_STATUS_LABEL,
 } from "@/lib/status";
 import { formatCents, formatDateTime } from "@/lib/format";
-import { getWindowColor, WINDOW_COLOR_BADGE_CLASS, WINDOW_COLOR_BORDER_CLASS } from "@/lib/window-color";
+import {
+  getWindowColor,
+  WINDOW_COLOR_BORDER_CLASS,
+  WINDOW_COLOR_CARD_CLASS,
+  WINDOW_COLOR_TEXT_CLASS,
+  windowSortKey,
+} from "@/lib/window-color";
 import type {
   EditionOption,
   FulfillmentType,
@@ -354,7 +360,10 @@ export function ProductionListScreen({
       status,
       orders: orders
         .filter((o) => o.order_status === status)
-        .sort((a, b) => a.created_at.localeCompare(b.created_at)),
+        .sort((a, b) => {
+          const windowDiff = windowSortKey(a.window_label_snapshot) - windowSortKey(b.window_label_snapshot);
+          return windowDiff !== 0 ? windowDiff : a.created_at.localeCompare(b.created_at);
+        }),
     }));
   }, [orders]);
 
@@ -448,11 +457,12 @@ export function ProductionListScreen({
                       const isMoving = movingId === order.id;
                       const windowColor = getWindowColor(order.window_label_snapshot);
                       const borderClass = windowColor ? WINDOW_COLOR_BORDER_CLASS[windowColor] : "border-l-transparent";
+                      const cardBgClass = windowColor ? WINDOW_COLOR_CARD_CLASS[windowColor] : "bg-white";
                       return (
                         <div
                           key={order.id}
                           onPointerDown={(e) => handleCardPointerDown(e, order)}
-                          className={`flex touch-none flex-col gap-2 rounded-xl border-l-4 bg-white p-3 shadow-sm transition-opacity ${borderClass} ${
+                          className={`flex touch-none flex-col gap-2 rounded-xl border-l-4 ${cardBgClass} p-3 shadow-sm transition-opacity ${borderClass} ${
                             isDragging ? "opacity-30" : "cursor-grab active:cursor-grabbing"
                           }`}
                         >
@@ -465,7 +475,7 @@ export function ProductionListScreen({
                             </div>
                             {windowColor ? (
                               <span
-                                className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${WINDOW_COLOR_BADGE_CLASS[windowColor]}`}
+                                className={`shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-extrabold ${WINDOW_COLOR_TEXT_CLASS[windowColor]}`}
                               >
                                 {order.window_label_snapshot}
                               </span>
@@ -701,7 +711,7 @@ function OrderCardBody({ order }: { order: ProductionOrder }) {
     <div className="flex flex-col gap-2">
       <ul className="flex flex-col gap-1.5">
         {order.order_items.map((item, i) => (
-          <li key={i} className="rounded-lg bg-cream-soft/60 px-2 py-1.5 text-xs leading-relaxed text-coffee-soft">
+          <li key={i} className="rounded-lg bg-white/70 px-2 py-1.5 text-xs leading-relaxed text-coffee-soft">
             <p>
               <span className="font-bold text-coffee">
                 {item.qty}× {item.product_name_snapshot}
@@ -718,7 +728,7 @@ function OrderCardBody({ order }: { order: ProductionOrder }) {
       </ul>
 
       {showNotes && order.notes && (
-        <p className="whitespace-pre-wrap break-words rounded-lg bg-orange-soft/40 px-2 py-1.5 text-xs text-orange-dark">
+        <p className="whitespace-pre-wrap break-words rounded-lg bg-white/70 px-2 py-1.5 text-xs text-orange-dark">
           <span className="font-bold">Obs. do pedido: </span>
           {order.notes}
         </p>
@@ -729,7 +739,7 @@ function OrderCardBody({ order }: { order: ProductionOrder }) {
       )}
 
       {showAddress && (
-        <div className="rounded-lg bg-cream-soft px-2 py-1.5 text-xs leading-relaxed text-coffee-soft">
+        <div className="rounded-lg bg-white/70 px-2 py-1.5 text-xs leading-relaxed text-coffee-soft">
           {order.fulfillment_type === "delivery" ? (
             <>
               <p className="font-semibold text-coffee">
@@ -767,7 +777,7 @@ function PaymentInfo({
   const troco = cashChange !== null && cashChange !== undefined ? cashChange - order.total_cents : null;
 
   return (
-    <div className={`flex flex-col gap-1.5 rounded-lg px-2.5 py-2 text-xs ${isPaid ? "bg-success-bg" : "bg-warning-bg"}`}>
+    <div className="flex flex-col gap-1.5 rounded-lg bg-white/70 px-2.5 py-2 text-xs">
       <div className="flex items-center justify-between gap-2">
         <span className="font-semibold text-coffee">{PAYMENT_METHOD_LABEL[order.payment_method]}</span>
         <span className={`font-bold ${isPaid ? "text-success" : "text-warning"}`}>
