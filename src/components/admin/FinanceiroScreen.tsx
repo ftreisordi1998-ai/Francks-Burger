@@ -215,6 +215,32 @@ export function FinanceiroScreen({
     }
   }
 
+  async function moveIncomeToExpense(income: FinanceIncome) {
+    const supabase = createClient();
+    const { data: newExpense, error: insertError } = await supabase
+      .from("finance_expenses")
+      .insert({
+        edition_id: income.edition_id,
+        description: income.description,
+        amount_cents: income.amount_cents,
+        status: "pago",
+      })
+      .select("*")
+      .single();
+    if (insertError || !newExpense) {
+      await alertDialog({ title: "Não foi possível mover", message: "Tente novamente em instantes.", tone: "danger" });
+      return;
+    }
+    const { error: deleteError } = await supabase.from("finance_incomes").delete().eq("id", income.id);
+    if (deleteError) {
+      await supabase.from("finance_expenses").delete().eq("id", newExpense.id);
+      await alertDialog({ title: "Não foi possível mover", message: "Tente novamente em instantes.", tone: "danger" });
+      return;
+    }
+    setIncomes((prev) => prev.filter((i) => i.id !== income.id));
+    setExpenses((prev) => [newExpense as FinanceExpense, ...prev]);
+  }
+
   async function deleteIncome(income: FinanceIncome) {
     const ok = await confirmDialog({
       title: `Excluir "${income.description}"?`,
@@ -260,6 +286,32 @@ export function FinanceiroScreen({
       .from("finance_expenses")
       .update({ ...patch, updated_at: new Date().toISOString() })
       .eq("id", expense.id);
+  }
+
+  async function moveExpenseToIncome(expense: FinanceExpense) {
+    const supabase = createClient();
+    const { data: newIncome, error: insertError } = await supabase
+      .from("finance_incomes")
+      .insert({
+        edition_id: expense.edition_id,
+        description: expense.description,
+        amount_cents: expense.amount_cents,
+        payment_method: "pix",
+      })
+      .select("*")
+      .single();
+    if (insertError || !newIncome) {
+      await alertDialog({ title: "Não foi possível mover", message: "Tente novamente em instantes.", tone: "danger" });
+      return;
+    }
+    const { error: deleteError } = await supabase.from("finance_expenses").delete().eq("id", expense.id);
+    if (deleteError) {
+      await supabase.from("finance_incomes").delete().eq("id", newIncome.id);
+      await alertDialog({ title: "Não foi possível mover", message: "Tente novamente em instantes.", tone: "danger" });
+      return;
+    }
+    setExpenses((prev) => prev.filter((e) => e.id !== expense.id));
+    setIncomes((prev) => [newIncome as FinanceIncome, ...prev]);
   }
 
   async function deleteExpense(expense: FinanceExpense) {
@@ -506,13 +558,14 @@ export function FinanceiroScreen({
         </div>
       </section>
 
-      <section className="flex flex-col gap-3 rounded-2xl bg-white p-4">
-        <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">
-          Entradas recebidas
+      <section className="flex flex-col gap-3 rounded-2xl border-l-4 border-success bg-white p-4">
+        <h2 className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-success">
+          <span>💰</span> Entradas recebidas (dinheiro que entrou)
         </h2>
         <p className="text-xs text-coffee-soft">
           Pedidos pagos pelo site entram aqui automaticamente. Use o formulário abaixo só para
-          dinheiro recebido fora do site (ex.: venda direta, gorjeta).
+          dinheiro recebido fora do site (ex.: venda direta, gorjeta, pedido combinado por
+          WhatsApp).
         </p>
 
         {windows.length > 0 && (
@@ -623,9 +676,9 @@ export function FinanceiroScreen({
           <button
             onClick={addIncome}
             disabled={savingIncome}
-            className="min-h-11 rounded-lg bg-orange px-4 text-sm font-bold text-white disabled:opacity-50"
+            className="min-h-11 rounded-lg bg-success px-4 text-sm font-bold text-white disabled:opacity-50"
           >
-            {selectedOrderId ? "Confirmar recebimento" : "+ Adicionar"}
+            {selectedOrderId ? "Confirmar recebimento" : "+ Registrar entrada"}
           </button>
         </div>
         {incomes.length > 0 && (
@@ -645,6 +698,12 @@ export function FinanceiroScreen({
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-success">{formatCents(income.amount_cents)}</span>
                   <button
+                    onClick={() => moveIncomeToExpense(income)}
+                    className="min-h-9 rounded-lg bg-cream-soft px-2.5 text-xs font-bold text-coffee-soft hover:text-coffee"
+                  >
+                    Era despesa?
+                  </button>
+                  <button
                     onClick={() => deleteIncome(income)}
                     aria-label="Excluir"
                     className="min-h-9 rounded-lg bg-danger-bg px-2.5 text-xs font-bold text-danger"
@@ -658,8 +717,10 @@ export function FinanceiroScreen({
         )}
       </section>
 
-      <section className="flex flex-col gap-3 rounded-2xl bg-white p-4">
-        <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">Despesas</h2>
+      <section className="flex flex-col gap-3 rounded-2xl border-l-4 border-danger bg-white p-4">
+        <h2 className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-danger">
+          <span>🛒</span> Despesas (dinheiro que saiu)
+        </h2>
         <p className="text-xs text-coffee-soft">
           Lance item por item, com o valor de cada um — é assim que dá pra calcular depois o
           custo de cada lanche (a chamada &ldquo;ficha técnica&rdquo;).
@@ -726,9 +787,9 @@ export function FinanceiroScreen({
           <button
             onClick={addExpense}
             disabled={savingExpense}
-            className="min-h-11 rounded-lg bg-orange px-4 text-sm font-bold text-white disabled:opacity-50"
+            className="min-h-11 rounded-lg bg-danger px-4 text-sm font-bold text-white disabled:opacity-50"
           >
-            + Adicionar
+            + Registrar despesa
           </button>
         </div>
         {expenses.length > 0 && (
@@ -773,6 +834,12 @@ export function FinanceiroScreen({
                     <option value="previsto">Previsto</option>
                     <option value="pago">Pago</option>
                   </select>
+                  <button
+                    onClick={() => moveExpenseToIncome(expense)}
+                    className="min-h-9 rounded-lg bg-cream-soft px-2.5 text-xs font-bold text-coffee-soft hover:text-coffee"
+                  >
+                    Era entrada?
+                  </button>
                   <button
                     onClick={() => deleteExpense(expense)}
                     aria-label="Excluir"
