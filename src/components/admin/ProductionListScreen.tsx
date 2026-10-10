@@ -156,6 +156,15 @@ export function ProductionListScreen({
 
   async function moveOrderTo(order: ProductionOrder, next: OrderStatus) {
     if (next === order.order_status) return;
+    if (next === "delivered") {
+      const itemsSummary = order.order_items.map((i) => `${i.qty}× ${i.product_name_snapshot}`).join(", ");
+      const ok = await confirmDialog({
+        title: `Confere antes de entregar: ${order.customer_name}`,
+        message: `Essa sacola é de ${order.customer_name}? Itens: ${itemsSummary}. Confirme só depois de bater com o que está na mão.`,
+        confirmLabel: "Sim, é esse pedido",
+      });
+      if (!ok) return;
+    }
     if (
       order.payment_method === "pix" &&
       order.payment_status !== "paid" &&
@@ -467,8 +476,10 @@ export function ProductionListScreen({
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-sm font-bold text-coffee">{order.customer_name}</p>
+                            <div className="min-w-0 rounded-lg bg-white/80 px-2 py-1">
+                              <p className="truncate text-base font-extrabold leading-tight text-coffee">
+                                {order.customer_name}
+                              </p>
                               <p className="text-[11px] text-coffee-soft/70">
                                 #{order.id.slice(0, 8).toUpperCase()}
                               </p>
@@ -711,15 +722,15 @@ function OrderCardBody({ order }: { order: ProductionOrder }) {
     <div className="flex flex-col gap-2">
       <ul className="flex flex-col gap-1.5">
         {order.order_items.map((item, i) => (
-          <li key={i} className="rounded-lg bg-white/70 px-2 py-1.5 text-xs leading-relaxed text-coffee-soft">
+          <li key={i} className="rounded-lg bg-white/80 px-2.5 py-2 text-sm leading-snug text-coffee-soft">
             <p>
-              <span className="font-bold text-coffee">
+              <span className="text-base font-extrabold text-coffee">
                 {item.qty}× {item.product_name_snapshot}
               </span>{" "}
-              — {item.doneness ?? "Ponto da casa"}
+              <span className="text-xs">— {item.doneness ?? "Ponto da casa"}</span>
             </p>
             {item.customer_note && (
-              <p className="mt-0.5 whitespace-pre-wrap break-words italic text-coffee-soft">
+              <p className="mt-0.5 whitespace-pre-wrap break-words text-xs italic text-coffee-soft">
                 &ldquo;{item.customer_note}&rdquo;
               </p>
             )}
