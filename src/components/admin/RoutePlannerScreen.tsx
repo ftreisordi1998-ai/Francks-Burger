@@ -484,6 +484,17 @@ export function RoutePlannerScreen({
       if (!pickingAvoidRef.current) return;
       addAvoidPoint(e.lngLat.lat, e.lngLat.lng);
     });
+    // A atribuição (obrigatória) abre expandida por padrão e, no celular,
+    // quebra em duas linhas ocupando um pedação do mapa. Recolhemos ela no
+    // botão "ⓘ" do próprio MapLibre — que continua sempre visível e abre os
+    // créditos com um toque, que é exatamente pra isso que o modo compacto
+    // existe.
+    map.on("load", () => {
+      map
+        .getContainer()
+        .querySelector(".maplibregl-ctrl-attrib")
+        ?.classList.remove("maplibregl-compact-show");
+    });
     map.getCanvas().style.cursor = "";
     mapRef.current = map;
     // O container só existe no DOM quando essa condição vira true — se o efeito
@@ -500,6 +511,18 @@ export function RoutePlannerScreen({
     const timeout = setTimeout(() => map.resize(), 0);
     return () => clearTimeout(timeout);
   }, [hasRoute]);
+
+  useEffect(() => {
+    // Rede de segurança: qualquer mudança de tamanho do container (girar o
+    // celular, abrir/fechar seções da página, mudar o zoom do navegador)
+    // avisa o MapLibre na hora. Sem isso o mapa fica com faixas em branco ou
+    // cortado até alguém redimensionar a janela.
+    const container = mapContainerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => mapRef.current?.resize());
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [showMapSection]);
 
   function fitToRoute() {
     const map = mapRef.current;
@@ -1097,20 +1120,23 @@ export function RoutePlannerScreen({
               {hasRoute && (
                 <button
                   onClick={fitToRoute}
-                  className="absolute left-3 top-3 min-h-9 rounded-lg bg-white/95 px-3 text-xs font-bold text-coffee shadow-md"
+                  className="absolute left-3 top-3 z-10 min-h-9 rounded-lg bg-white/95 px-3 text-xs font-bold text-coffee shadow-md"
                 >
                   Ver rota completa
                 </button>
               )}
 
               {mapError && (
-                <div className="absolute inset-x-3 top-3 rounded-lg bg-danger-bg px-3 py-2 text-xs font-semibold text-danger shadow-md">
+                <div className="absolute inset-x-3 top-3 z-10 rounded-lg bg-danger-bg px-3 py-2 text-xs font-semibold text-danger shadow-md">
                   {mapError}
                 </div>
               )}
 
               {selectedStopData && (
-                <div className="absolute bottom-3 left-3 right-3 flex items-start gap-2 rounded-xl bg-white p-3 shadow-lg sm:right-auto sm:max-w-xs">
+                // bottom-9 (não bottom-3) pra ficar acima da barra de
+                // atribuição do mapa, que é obrigatória e fica colada embaixo —
+                // com bottom-3 os dois se sobrepunham e o card ficava cortado.
+                <div className="absolute bottom-9 left-3 right-3 z-10 flex items-start gap-2 rounded-xl bg-white p-3 shadow-lg sm:right-auto sm:max-w-xs">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange text-xs font-bold text-white">
                     {selectedStopData.stopIndex}
                   </span>
@@ -1132,7 +1158,7 @@ export function RoutePlannerScreen({
               )}
 
               {deliverySession && !hasRoute && (
-                <p className="absolute bottom-3 left-3 rounded-lg bg-white/95 px-3 py-1.5 text-xs text-coffee-soft shadow-md">
+                <p className="absolute bottom-9 left-3 z-10 max-w-[calc(100%-1.5rem)] rounded-lg bg-white/95 px-3 py-1.5 text-xs text-coffee-soft shadow-md">
                   {deliverySession.status === "active"
                     ? "Mostrando a posição do motoboy ao vivo."
                     : "Assim que o motoboy iniciar pelo link, a posição aparece aqui."}
