@@ -82,6 +82,7 @@ export function CheckoutScreen({
   const [error, setError] = useState<string | null>(null);
 
   const availableWindows = windows.filter((w) => w.type === fulfillment);
+  const selectedWindowLabel = availableWindows.find((w) => w.id === windowId)?.label ?? null;
   const neighborhood = neighborhoods.find((n) => n.id === neighborhoodId);
   const feeKnown = fulfillment !== "delivery" || !!neighborhoodId || edition.free_delivery;
   const deliveryFeeCents =
@@ -527,6 +528,12 @@ export function CheckoutScreen({
             <h2 className="mb-1 text-sm font-extrabold uppercase tracking-wide text-coffee-soft">
               Resumo
             </h2>
+            {selectedWindowLabel && (
+              <SummaryRow
+                label={fulfillment === "delivery" ? "Horário de entrega" : "Horário de retirada"}
+                value={selectedWindowLabel}
+              />
+            )}
             <SummaryRow label="Subtotal" value={formatCents(subtotalCents)} />
             {fulfillment === "delivery" && (
               <SummaryRow

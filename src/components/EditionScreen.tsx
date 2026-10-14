@@ -130,6 +130,10 @@ export function EditionScreen({
 
   const deliveryWindows = windows.filter((w) => w.type === "delivery");
   const pickupWindows = edition.pickup_enabled ? windows.filter((w) => w.type === "pickup") : [];
+  const deliveryOnly = deliveryWindows.length > 0 && pickupWindows.length === 0;
+  const freeDeliveryAreas = edition.free_delivery
+    ? neighborhoods.filter((n) => n.active).map((n) => n.name)
+    : [];
 
   const situationMessages: Record<string, string> = {
     sold_out: "Esta edição esgotou. Fique de olho para a próxima.",
@@ -264,7 +268,10 @@ export function EditionScreen({
             <div className="flex flex-wrap items-center gap-2 lg:justify-end">
               <Badge tone={SITUATION_TONE[situation]}>{SITUATION_LABEL[situation]}</Badge>
               <span className="text-sm text-coffee-soft">
-                Preparo em{" "}
+                {/* Numa edição só de entrega, "Entregas na" diz mais ao cliente do
+                    que "Preparo em" — a data é a mesma. Com retirada no meio, a
+                    data é de preparo e cada janela tem seu próprio rótulo. */}
+                {deliveryOnly ? "Entregas na" : "Preparo em"}{" "}
                 <strong className="font-bold text-coffee">
                   {formatWeekday(edition.prep_date)}, {formatDate(edition.prep_date)}
                 </strong>
@@ -279,10 +286,11 @@ export function EditionScreen({
               </p>
             ) : (
               <p className="text-sm text-coffee-soft">
-                Prazo para encomendar:{" "}
+                Encomendas até{" "}
                 <strong className="font-semibold text-coffee">
                   {formatDateTime(edition.order_deadline)}
                 </strong>
+                , ou enquanto houver disponibilidade.
               </p>
             )}
           </div>
@@ -303,6 +311,12 @@ export function EditionScreen({
               </p>
             )}
           </div>
+        )}
+
+        {freeDeliveryAreas.length > 0 && (
+          <p className="mt-2.5 text-sm font-semibold text-success">
+            Entrega grátis na área atendida de Uraí ({freeDeliveryAreas.join(" · ")}).
+          </p>
         )}
 
         <p className="mt-3 text-xs leading-relaxed text-coffee-soft/80">

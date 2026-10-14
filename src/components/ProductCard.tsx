@@ -51,8 +51,12 @@ export function ProductCard({
         )}
       </div>
       <div className="flex flex-1 flex-col gap-1 px-4 py-3.5">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="min-w-0 flex-1 text-base font-bold leading-tight text-coffee">
+        {/* flex-wrap + basis: com min-w-0 o título encolhe abaixo da largura do
+            texto e, sem overflow:hidden, as letras vazam por baixo do preço no
+            card estreito do celular ("Franck's Duplo Queijo"). Deixando o preço
+            quebrar pra linha de baixo, o título recebe a largura inteira. */}
+        <div className="flex flex-wrap items-start justify-between gap-x-2">
+          <h3 className="min-w-0 flex-1 basis-24 text-base font-bold leading-tight text-coffee">
             {product.name}
           </h3>
           <span className="shrink-0 text-base font-extrabold text-orange">
