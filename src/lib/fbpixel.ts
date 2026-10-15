@@ -4,8 +4,11 @@ declare global {
   }
 }
 
-export function fbTrack(event: string, params?: Record<string, unknown>) {
+// `eventId` permite deduplicar o mesmo evento entre navegador e servidor
+// (Conversions API) — para Purchase usamos o id do pedido, que é estável.
+export function fbTrack(event: string, params?: Record<string, unknown>, eventId?: string) {
   if (typeof window !== "undefined" && typeof window.fbq === "function") {
-    window.fbq("track", event, params);
+    if (eventId) window.fbq("track", event, params, { eventID: eventId });
+    else window.fbq("track", event, params);
   }
 }

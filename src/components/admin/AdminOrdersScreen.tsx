@@ -234,8 +234,10 @@ export function AdminOrdersScreen({
               <Badge tone={PAYMENT_STATUS_TONE[order.payment_status]}>
                 {PAYMENT_STATUS_LABEL[order.payment_status]}
               </Badge>
+              {order.payment_resolution_required && <Badge tone="danger">Requer resolução</Badge>}
               <span className="text-xs text-coffee-soft">
                 {PAYMENT_METHOD_LABEL[order.payment_method]}
+                {order.payment_provider === "mercadopago" && " · online"}
                 {order.payment_proofs.length > 0 && " · 📎 comprovante"}
               </span>
             </span>

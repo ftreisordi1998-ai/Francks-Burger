@@ -11,6 +11,7 @@ import { silentlyLinkExistingSubscription } from "@/lib/push";
 import { formatCents, formatDate, formatWeekday } from "@/lib/format";
 import { fbTrack } from "@/lib/fbpixel";
 import { gtagEvent } from "@/lib/gtag";
+import { onlinePaymentsEnabled } from "@/lib/mercadopago/config";
 import { QtyStepper } from "./QtyStepper";
 import type {
   DeliveryWindow,
@@ -171,19 +172,28 @@ export function CheckoutScreen({
       return;
     }
 
-    const result = data as { public_token: string };
-    fbTrack("Purchase", {
-      value: totalCents / 100,
-      currency: "BRL",
-      content_type: "product",
-      num_items: items.reduce((sum, i) => sum + i.qty, 0),
-    });
-    gtagEvent("purchase", {
-      transaction_id: result.public_token,
-      currency: "BRL",
-      value: totalCents / 100,
-      items: items.map((i) => ({ item_id: i.productId, item_name: i.name, quantity: i.qty })),
-    });
+    const result = data as { public_token: string; order_id?: string };
+    // No pagamento online, "Purchase" só dispara depois da aprovação verificada
+    // pelo servidor (na tela do pedido), deduplicada pelo id do pedido.
+    const payOnline = onlinePaymentsEnabled() && paymentMethod === "pix";
+    if (!payOnline) {
+      fbTrack(
+        "Purchase",
+        {
+          value: totalCents / 100,
+          currency: "BRL",
+          content_type: "product",
+          num_items: items.reduce((sum, i) => sum + i.qty, 0),
+        },
+        result.order_id
+      );
+      gtagEvent("purchase", {
+        transaction_id: result.order_id ?? result.public_token,
+        currency: "BRL",
+        value: totalCents / 100,
+        items: items.map((i) => ({ item_id: i.productId, item_name: i.name, quantity: i.qty })),
+      });
+    }
     clear();
     silentlyLinkExistingSubscription(result.public_token);
     router.push(`/pedido/${result.public_token}`);
@@ -454,7 +464,7 @@ export function CheckoutScreen({
             </h2>
             <div className="flex flex-wrap gap-2">
               <ToggleButton active={paymentMethod === "pix"} onClick={() => setPaymentMethod("pix")}>
-                Pix
+                {onlinePaymentsEnabled() ? "Pix ou cartão (online)" : "Pix"}
               </ToggleButton>
               {edition.accepts_card_on_delivery && (
                 <ToggleButton active={paymentMethod === "card"} onClick={() => setPaymentMethod("card")}>
@@ -469,8 +479,9 @@ export function CheckoutScreen({
             </div>
             {paymentMethod === "pix" && (
               <p className="text-xs leading-relaxed text-coffee-soft">
-                Você vai receber a chave Pix, QR Code e código para copiar e colar depois de
-                confirmar.
+                {onlinePaymentsEnabled()
+                  ? "Depois de confirmar, você paga na própria página do pedido — Pix (QR Code) ou cartão de crédito à vista. A confirmação é automática, sem comprovante."
+                  : "Você vai receber a chave Pix, QR Code e código para copiar e colar depois de confirmar."}
               </p>
             )}
             {paymentMethod === "card" && (

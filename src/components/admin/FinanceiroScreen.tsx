@@ -85,6 +85,7 @@ export function FinanceiroScreen({
   windows,
   pendingOrders,
   confirmedPaymentByOrderId,
+  mpSummary,
 }: {
   editions: EditionOption[];
   selectedEditionId: string;
@@ -97,6 +98,14 @@ export function FinanceiroScreen({
   windows: DeliveryWindow[];
   pendingOrders: PendingOrderRow[];
   confirmedPaymentByOrderId: Record<string, string>;
+  mpSummary?: {
+    count: number;
+    gross_cents: number;
+    fee_cents: number;
+    net_cents: number;
+    fees_pending_count: number;
+    test_count: number;
+  };
 }) {
   const router = useRouter();
   const { confirmDialog, alertDialog } = useDialog();
@@ -527,6 +536,35 @@ export function FinanceiroScreen({
           tone={summary.sobraAtual >= 0 ? "success" : "danger"}
         />
       </div>
+
+      {mpSummary && (mpSummary.count > 0 || mpSummary.test_count > 0) && (
+        <section className="flex flex-col gap-2 rounded-2xl bg-white p-4">
+          <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">
+            Pagamentos online · Mercado Pago
+          </h2>
+          <p className="text-xs text-coffee-soft">
+            A receita destes pedidos já está em &ldquo;Total recebido&rdquo; (contada uma vez, pelo
+            pedido). Aqui ficam só as taxas e o líquido que o provedor informou — não é saldo
+            disponível para saque.
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <SummaryCard label="Aprovados" value={`${mpSummary.count}`} sub={formatCents(mpSummary.gross_cents)} />
+            <SummaryCard label="Taxas do provedor" value={formatCents(mpSummary.fee_cents)} tone="danger" />
+            <SummaryCard label="Líquido informado" value={formatCents(mpSummary.net_cents)} tone="success" />
+            <SummaryCard
+              label="Taxas pendentes"
+              value={`${mpSummary.fees_pending_count}`}
+              sub={mpSummary.fees_pending_count > 0 ? "aguardando conciliação" : "tudo conciliado"}
+              tone={mpSummary.fees_pending_count > 0 ? "danger" : "neutral"}
+            />
+          </div>
+          {mpSummary.test_count > 0 && (
+            <p className="text-xs font-semibold text-warning">
+              {mpSummary.test_count} transação(ões) de TESTE (sandbox) foram ignoradas nos totais acima.
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="flex flex-col gap-3 rounded-2xl bg-white p-4">
         <h2 className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">

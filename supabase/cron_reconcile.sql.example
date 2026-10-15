@@ -1,0 +1,27 @@
+-- Conciliação periódica dos pagamentos online.
+-- Execute UMA vez no SQL Editor do Supabase, substituindo os dois valores.
+-- Usa pg_cron (já ativo no projeto) + pg_net (habilitado na migração).
+--
+-- A cada 2 minutos o banco chama a rota de conciliação do site, que:
+--   * reconsulta no Mercado Pago as cobranças ainda abertas;
+--   * recupera criações que ficaram sem resposta (timeout);
+--   * libera a reserva de pedidos online vencidos — só depois de confirmar
+--     no provedor que nenhuma cobrança virou dinheiro.
+
+select cron.schedule(
+  'mp-reconcile-payments',
+  '*/2 * * * *',
+  $$
+  select net.http_post(
+    url     := 'https://francksburger.com.br/api/payments/reconcile',
+    headers := jsonb_build_object(
+      'Content-Type',  'application/json',
+      'Authorization', 'Bearer COLOQUE_AQUI_O_PAYMENTS_RECONCILE_SECRET'
+    ),
+    body    := '{}'::jsonb
+  );
+  $$
+);
+
+-- Para conferir:   select * from cron.job;
+-- Para remover:    select cron.unschedule('mp-reconcile-payments');

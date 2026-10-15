@@ -11,6 +11,8 @@ import { ensureMaplibreWorker } from "@/lib/maplibre-worker-setup";
 import { useSwipeBack } from "@/lib/useSwipeBack";
 import { PixPayment } from "./PixPayment";
 import { PaymentProofUpload } from "./PaymentProofUpload";
+import { OnlinePayment } from "./OnlinePayment";
+import { onlinePaymentsEnabled } from "@/lib/mercadopago/config";
 import { buildStoreWhatsAppUrl } from "@/lib/contact";
 import {
   getExistingPushSubscription,
@@ -171,6 +173,14 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
     order.payment_status !== "refund_pending" &&
     order.payment_status !== "refunded" &&
     order.order_status !== "cancelled";
+
+  // Pedidos do fluxo antigo (provider "manual") continuam na chave Pix +
+  // comprovante mesmo com a cobrança online ligada; só pedidos novos (sem
+  // provider) ou já online usam o Mercado Pago.
+  const useOnlinePayment =
+    onlinePaymentsEnabled() &&
+    order.payment_method === "pix" &&
+    order.payment_provider !== "manual";
 
   async function handleProofSubmitted() {
     setJustSubmittedProof(true);
@@ -354,7 +364,18 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
         </div>
       </section>
 
-      {isPending && (
+      {useOnlinePayment && (isPending || (order.payment_status === "paid" && order.payment_resolution_required)) && (
+        <OnlinePayment
+          publicToken={order.public_token}
+          orderId={order.id}
+          totalCents={order.total_cents}
+          customerName={order.customer_name}
+          orderDeadline={order.order_deadline}
+          initialPaymentStatus={order.payment_resolution_required ? "resolution" : order.payment_status}
+        />
+      )}
+
+      {isPending && !useOnlinePayment && (
         <section className="mt-4 rounded-2xl bg-orange-soft px-4 py-4">
           {order.payment_method === "pix" && (
             <>
@@ -437,7 +458,7 @@ export function OrderTrackingScreen({ order: initial }: { order: OrderTrackingVi
         </section>
       )}
 
-      {order.payment_method === "pix" && order.payment_status === "pending" && (
+      {order.payment_method === "pix" && order.payment_status === "pending" && !useOnlinePayment && (
         <PaymentProofUpload publicToken={order.public_token} onSubmitted={handleProofSubmitted} />
       )}
 

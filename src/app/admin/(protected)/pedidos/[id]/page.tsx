@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { OrderDetailScreen } from "@/components/admin/OrderDetailScreen";
-import type { AdminOrderRow, Product } from "@/lib/types";
+import type { AdminOrderRow, PaymentAttemptRow, Product } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +33,12 @@ export default async function AdminOrderDetailPage({
     .eq("active", true)
     .order("sort_order", { ascending: true });
 
+  const { data: paymentAttempts } = await supabase
+    .from("payment_attempts")
+    .select("*")
+    .eq("order_id", id)
+    .order("created_at", { ascending: false });
+
   // O WhatsApp é digitado livre (sem máscara), então o mesmo número pode estar
   // salvo com formatações diferentes entre pedidos — comparar só os dígitos.
   const digits = order.whatsapp.replace(/\D/g, "");
@@ -57,6 +63,7 @@ export default async function AdminOrderDetailPage({
       items={items ?? []}
       products={(products ?? []) as Product[]}
       previousOrders={previousOrders}
+      paymentAttempts={(paymentAttempts ?? []) as PaymentAttemptRow[]}
     />
   );
 }

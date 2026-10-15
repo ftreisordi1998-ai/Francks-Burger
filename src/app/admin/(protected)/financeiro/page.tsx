@@ -115,6 +115,31 @@ export default async function AdminFinanceiroPage({
   );
   const openAmountCents = pendingOrders.reduce((sum, o) => sum + o.total_cents, 0);
 
+  // Cobranças online aprovadas desta edição: bruto, taxas e líquido informados
+  // pelo provedor. Transações de teste (live_mode=false) ficam separadas.
+  const { data: mpAttempts } = await supabase
+    .from("payment_attempts")
+    .select("amount_cents, fee_cents, net_received_cents, fees_pending, live_mode, orders!inner(edition_id)")
+    .eq("status", "approved")
+    .eq("orders.edition_id", editionId);
+  const mpSummary = (mpAttempts ?? []).reduce(
+    (acc, a) => {
+      if (a.live_mode === false) {
+        acc.test_count += 1;
+        return acc;
+      }
+      acc.count += 1;
+      acc.gross_cents += a.amount_cents;
+      if (a.fees_pending) acc.fees_pending_count += 1;
+      else {
+        acc.fee_cents += a.fee_cents ?? 0;
+        acc.net_cents += a.net_received_cents ?? 0;
+      }
+      return acc;
+    },
+    { count: 0, gross_cents: 0, fee_cents: 0, net_cents: 0, fees_pending_count: 0, test_count: 0 }
+  );
+
   return (
     <FinanceiroScreen
       editions={(editions ?? []) as EditionOption[]}
@@ -128,6 +153,7 @@ export default async function AdminFinanceiroPage({
       windows={(windows ?? []) as DeliveryWindow[]}
       pendingOrders={pendingOrders}
       confirmedPaymentByOrderId={confirmedPaymentByOrderId}
+      mpSummary={mpSummary}
     />
   );
 }

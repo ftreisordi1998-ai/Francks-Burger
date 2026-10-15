@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...menos o modelo, que só tem nomes de variáveis e valores fictícios.
+!.env.example
 
 # vercel
 .vercel

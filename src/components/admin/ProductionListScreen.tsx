@@ -59,6 +59,8 @@ interface ProductionOrder {
   payment_status: PaymentStatus;
   payment_confirmed_at: string | null;
   payment_confirmed_by: string | null;
+  payment_resolution_required?: boolean;
+  payment_resolution_reason?: string | null;
   delivered_at: string | null;
   cancel_reason: string | null;
   created_at: string;
@@ -119,7 +121,7 @@ export function ProductionListScreen({
       const { data } = await supabase
         .from("orders")
         .select(
-          "id, customer_name, whatsapp, fulfillment_type, window_id, window_label_snapshot, address_street, address_number, address_complement, address_reference, neighborhood_name_snapshot, notes, subtotal_cents, delivery_fee_cents, total_cents, cash_change_for_cents, order_status, payment_method, payment_status, payment_confirmed_at, payment_confirmed_by, delivered_at, cancel_reason, created_at, order_items(product_name_snapshot, doneness, customer_note, qty)"
+          "id, customer_name, whatsapp, fulfillment_type, window_id, window_label_snapshot, address_street, address_number, address_complement, address_reference, neighborhood_name_snapshot, notes, subtotal_cents, delivery_fee_cents, total_cents, cash_change_for_cents, order_status, payment_method, payment_status, payment_confirmed_at, payment_confirmed_by, payment_resolution_required, payment_resolution_reason, delivered_at, cancel_reason, created_at, order_items(product_name_snapshot, doneness, customer_note, qty)"
         )
         .eq("edition_id", selectedEditionId)
         .order("created_at", { ascending: true });
@@ -496,6 +498,17 @@ export function ProductionListScreen({
                               </span>
                             )}
                           </div>
+
+                          {order.payment_resolution_required && (
+                            <div className="rounded-lg bg-danger-bg px-2.5 py-1.5">
+                              <p className="text-[11px] font-extrabold uppercase tracking-wide text-danger">
+                                Pagamento recebido — requer resolução
+                              </p>
+                              <p className="mt-0.5 text-[11px] leading-snug text-coffee">
+                                {order.payment_resolution_reason ?? "Verifique no detalhe do pedido."}
+                              </p>
+                            </div>
+                          )}
 
                           <OrderCardBody order={order} />
 

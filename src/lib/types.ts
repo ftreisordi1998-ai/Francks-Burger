@@ -164,6 +164,62 @@ export interface OrderTrackingView {
   cash_change_for_cents: number | null;
   edition_id: string;
   window_id: string;
+  payment_provider: PaymentProvider | null;
+  payment_resolution_required: boolean;
+  order_deadline: string;
+}
+
+export type PaymentProvider = "manual" | "mercadopago";
+
+export type PaymentAttemptStatus =
+  | "creating"
+  | "pending"
+  | "in_process"
+  | "authorized"
+  | "in_mediation"
+  | "approved"
+  | "rejected"
+  | "cancelled"
+  | "refunded"
+  | "charged_back";
+
+export interface PaymentAttemptView {
+  id: string;
+  method: "pix" | "credit_card";
+  status: PaymentAttemptStatus;
+  status_detail: string | null;
+  amount_cents: number;
+  date_of_expiration: string | null;
+  qr_code: string | null;
+  qr_code_base64: string | null;
+  ticket_url: string | null;
+  provider_payment_id?: string | null;
+}
+
+export interface OrderPaymentState {
+  order_id: string;
+  payment_status: PaymentStatus;
+  order_status: OrderStatus;
+  payment_provider: PaymentProvider | null;
+  payment_resolution_required: boolean;
+  total_cents: number;
+  expires_at: string | null;
+  order_deadline: string;
+  attempt: PaymentAttemptView | null;
+}
+
+export interface PaymentAttemptRow extends PaymentAttemptView {
+  order_id: string;
+  provider: string;
+  idempotency_key: string;
+  currency: string;
+  live_mode: boolean | null;
+  date_approved: string | null;
+  fee_cents: number | null;
+  net_received_cents: number | null;
+  fees_pending: boolean;
+  last_synced_at: string | null;
+  created_at: string;
 }
 
 export interface AdminOrderRow {
@@ -195,6 +251,9 @@ export interface AdminOrderRow {
   delivered_at: string | null;
   editions: { title: string; prep_date: string } | null;
   payment_proofs: PaymentProof[];
+  payment_provider?: PaymentProvider | null;
+  payment_resolution_required?: boolean;
+  payment_resolution_reason?: string | null;
 }
 
 export type GeocodeStatus = "ok" | "ambiguous" | "failed" | "manual";

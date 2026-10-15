@@ -1,4 +1,11 @@
-import type { FinanceExpenseStatus, FinancePaymentMethod, OrderStatus, PaymentMethod, PaymentStatus } from "./types";
+import type {
+  FinanceExpenseStatus,
+  FinancePaymentMethod,
+  OrderStatus,
+  PaymentAttemptStatus,
+  PaymentMethod,
+  PaymentStatus,
+} from "./types";
 
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   pix: "Pix",
@@ -15,6 +22,34 @@ export const FINANCE_PAYMENT_METHOD_LABEL: Record<FinancePaymentMethod, string> 
 export const FINANCE_EXPENSE_STATUS_LABEL: Record<FinanceExpenseStatus, string> = {
   previsto: "Previsto",
   pago: "Pago",
+};
+
+// Estados reais da API de pagamentos do Mercado Pago (status da cobrança),
+// separados do status do pedido.
+export const PAYMENT_ATTEMPT_STATUS_LABEL: Record<PaymentAttemptStatus, string> = {
+  creating: "Criando cobrança",
+  pending: "Aguardando pagamento",
+  in_process: "Em análise",
+  authorized: "Autorizado (aguardando captura)",
+  in_mediation: "Em disputa",
+  approved: "Aprovado",
+  rejected: "Recusado",
+  cancelled: "Cancelado / expirado",
+  refunded: "Estornado",
+  charged_back: "Contestado (chargeback)",
+};
+
+export const PAYMENT_ATTEMPT_STATUS_TONE: Record<PaymentAttemptStatus, "warning" | "success" | "danger" | "info"> = {
+  creating: "warning",
+  pending: "warning",
+  in_process: "info",
+  authorized: "info",
+  in_mediation: "danger",
+  approved: "success",
+  rejected: "danger",
+  cancelled: "danger",
+  refunded: "danger",
+  charged_back: "danger",
 };
 
 export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {

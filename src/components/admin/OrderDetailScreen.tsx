@@ -13,11 +13,13 @@ import {
   ORDER_STATUS_FLOW,
   ORDER_STATUS_LABEL,
   ORDER_STATUS_TONE,
+  PAYMENT_ATTEMPT_STATUS_LABEL,
+  PAYMENT_ATTEMPT_STATUS_TONE,
   PAYMENT_METHOD_LABEL,
   PAYMENT_STATUS_LABEL,
   PAYMENT_STATUS_TONE,
 } from "@/lib/status";
-import type { AdminOrderRow, OrderStatus, PreviousOrderRow, Product } from "@/lib/types";
+import type { AdminOrderRow, OrderStatus, PaymentAttemptRow, PreviousOrderRow, Product } from "@/lib/types";
 
 interface OrderItemRow {
   id: string;
@@ -60,13 +62,46 @@ export function OrderDetailScreen({
   items: initialItems,
   products,
   previousOrders,
+  paymentAttempts = [],
 }: {
   order: AdminOrderRow;
   items: OrderItemRow[];
   products: Product[];
   previousOrders: PreviousOrderRow[];
+  paymentAttempts?: PaymentAttemptRow[];
 }) {
   const [order, setOrder] = useState(initial);
+  const [resolving, setResolving] = useState(false);
+
+  async function resolvePaymentIssue(action: "confirm" | "dismiss") {
+    const ok = await confirmDialog({
+      title: action === "confirm" ? "Confirmar a encomenda mesmo assim?" : "Marcar como resolvido?",
+      message:
+        action === "confirm"
+          ? "O pedido entra na fila de produção. Use só se a reserva/horário ainda puderem ser atendidos."
+          : "O alerta some, sem mexer na produção nem no estoque. Se houver estorno a fazer, faça no painel do Mercado Pago.",
+      confirmLabel: action === "confirm" ? "Confirmar encomenda" : "Marcar resolvido",
+    });
+    if (!ok) return;
+    setResolving(true);
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("admin_resolve_payment_issue", {
+      p_order_id: order.id,
+      p_action: action,
+    });
+    setResolving(false);
+    if (error) {
+      await alertDialog({ title: "Não foi possível resolver", message: error.message, tone: "danger" });
+      return;
+    }
+    const r = data as { order_status: OrderStatus; payment_resolution_required: boolean };
+    setOrder((prev) => ({
+      ...prev,
+      order_status: r.order_status,
+      payment_resolution_required: r.payment_resolution_required,
+      payment_resolution_reason: r.payment_resolution_required ? prev.payment_resolution_reason : null,
+    }));
+  }
   const [items, setItems] = useState(initialItems);
   const [busy, setBusy] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
@@ -405,9 +440,78 @@ export function OrderDetailScreen({
 
       {order.payment_status === "paid" && order.payment_confirmed_at && (
         <p className="mt-1.5 text-xs text-coffee-soft">
-          Pagamento confirmado por {order.payment_confirmed_by === "courier" ? "motoboy" : "admin"} em{" "}
-          {formatDateTime(order.payment_confirmed_at)}
+          Pagamento confirmado por{" "}
+          {order.payment_confirmed_by === "courier"
+            ? "motoboy"
+            : order.payment_confirmed_by === "mercadopago"
+              ? "Mercado Pago (automático)"
+              : "admin"}{" "}
+          em {formatDateTime(order.payment_confirmed_at)}
         </p>
+      )}
+
+      {order.payment_resolution_required && (
+        <section className="mt-3 rounded-xl border border-danger/30 bg-danger-bg px-4 py-3">
+          <p className="text-xs font-extrabold uppercase tracking-wide text-danger">
+            Pagamento recebido — requer resolução
+          </p>
+          <p className="mt-1 text-sm text-coffee">{order.payment_resolution_reason ?? "Verifique a cobrança."}</p>
+          <p className="mt-1.5 text-xs text-coffee-soft">
+            O pedido NÃO entrou na produção. Se for estornar, faça pelo painel do Mercado Pago (não há
+            estorno automático) e depois marque como resolvido.
+          </p>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {order.order_status === "awaiting_confirmation" && (
+              <button
+                onClick={() => resolvePaymentIssue("confirm")}
+                disabled={resolving}
+                className="min-h-10 rounded-lg bg-orange px-3.5 text-xs font-bold text-white disabled:opacity-50"
+              >
+                Confirmar encomenda mesmo assim
+              </button>
+            )}
+            <button
+              onClick={() => resolvePaymentIssue("dismiss")}
+              disabled={resolving}
+              className="min-h-10 rounded-lg bg-white px-3.5 text-xs font-bold text-coffee ring-1 ring-coffee/15 disabled:opacity-50"
+            >
+              Marcar como resolvido
+            </button>
+          </div>
+        </section>
+      )}
+
+      {paymentAttempts.length > 0 && (
+        <section className="mt-3 rounded-xl bg-cream-soft px-4 py-3">
+          <p className="text-xs font-extrabold uppercase tracking-wide text-coffee-soft">
+            Cobranças online · Mercado Pago
+          </p>
+          <div className="mt-2 flex flex-col gap-2">
+            {paymentAttempts.map((a) => (
+              <div key={a.id} className="rounded-lg bg-white px-3 py-2 text-xs">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge tone={PAYMENT_ATTEMPT_STATUS_TONE[a.status]}>{PAYMENT_ATTEMPT_STATUS_LABEL[a.status]}</Badge>
+                  <span className="font-semibold text-coffee">{a.method === "pix" ? "Pix" : "Cartão de crédito"}</span>
+                  <span className="text-coffee-soft">· {formatCents(a.amount_cents)}</span>
+                  {a.live_mode === false && <Badge tone="warning">TESTE</Badge>}
+                </div>
+                <p className="mt-1 text-coffee-soft">
+                  ID da transação: <span className="font-mono">{a.provider_payment_id ?? "—"}</span>
+                  {a.status_detail && <> · {a.status_detail}</>}
+                </p>
+                <p className="text-coffee-soft">
+                  {a.date_approved ? `Aprovado em ${formatDateTime(a.date_approved)}` : `Criado em ${formatDateTime(a.created_at)}`}
+                  {a.method === "pix" && a.date_of_expiration && ` · vence ${formatDateTime(a.date_of_expiration)}`}
+                </p>
+                <p className="text-coffee-soft">
+                  {a.fees_pending
+                    ? "Taxas: ainda não informadas pelo provedor (conciliação pendente)"
+                    : `Taxa: ${formatCents(a.fee_cents ?? 0)} · Líquido: ${formatCents(a.net_received_cents ?? 0)}`}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {order.payment_method === "pix" && (
